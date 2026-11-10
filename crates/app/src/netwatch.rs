@@ -52,11 +52,17 @@ impl NetWatch {
 }
 
 fn compute(wanted: &str) -> Route {
+    route_in(wanted, &adapters())
+}
+
+/// The route for the adapter `wanted` among `adapters` (as [`adapters`] lists them): Combine
+/// networks works its networks' routes out with it, from one reading of the adapters.
+pub fn route_in(wanted: &str, adapters: &[mdm_engine::net::Adapter]) -> Route {
     if wanted.trim().is_empty() {
         return Route::Any;
     }
     #[allow(unused_mut)]
-    let mut route = mdm_engine::net::route_for(wanted, &adapters());
+    let mut route = mdm_engine::net::route_for(wanted, adapters);
     // The test adapter (debug builds, below) is on loopback, where the lab server is too:
     // connections to this computer are bound to it as well, so the lab sees them come from the
     // adapter's address (#35, the helpers' relay; unbound, nothing would show it).

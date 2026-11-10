@@ -1,3 +1,24 @@
+# Mister Download Manager, with Plexo's capabilities
+
+> **This is a combined build.** It is [Mister Download Manager](https://github.com/anefzaoui/misterdownloadmanager)
+> (its engine, its windows, its look; GPL-3.0-or-later) with the capabilities of
+> [Plexo](https://github.com/anmolkapil/plexo) (MIT) that it lacked, written anew in Rust for
+> MDM's engine and drawn in MDM's own style:
+>
+> - **Combine networks** (Downloads → Combine networks…): a file downloads through Wi-Fi and
+>   Ethernet, a phone on USB or a second line at once, each with connections of its own, so
+>   their speeds add up. Networks can be switched on and off while downloads run, named, given
+>   a speed limit and a data allowance per day, week or month; the progress window says which
+>   network each connection uses and the status strip how fast each is.
+>   `misterdownloadmanager-cli get <url> --combine eno2,wlan0` does it from the command line.
+> - **Usenet** (Tasks → Open NZB file…, Tasks → Usenet server…): the files an NZB describes,
+>   from your news server, with resume.
+> - Fixes to Mister Download Manager itself: see [CHANGELOG.md](CHANGELOG.md), *Unreleased*.
+>
+> What it does not take from Plexo: Telegram downloads. Everything else Plexo lists (queues, the
+> scheduler, speed limits, torrents, browser capture, refreshing an expired link) MDM already
+> had. Details: [docs/combine-networks.md](docs/combine-networks.md), [docs/usenet.md](docs/usenet.md).
+
 # Mister Download Manager
 
 <p align="center">

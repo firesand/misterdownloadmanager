@@ -106,7 +106,7 @@ pub enum Filter {
 pub fn filter_values(col: usize) -> Option<&'static [&'static str]> {
     match col {
         // i18n: where a download comes from: Web (web or FTP server) or Torrent (BitTorrent)
-        SOURCE => Some(&["Web", "Torrent"]),
+        SOURCE => Some(&["Web", "Torrent", "Usenet"]),
         1 => Some(&["In a queue", "Not in a queue"]),
         // i18n: a download's status (state it is in, not a command)
         3 => Some(&["Downloading", "Stopped", "Waiting", "Complete", "Error"]),
@@ -1217,7 +1217,7 @@ fn dotted(p: &egui::Painter, l: f32, t: f32, r: f32, b: f32, color: Color32) {
     }
 }
 
-/// A Source chip: a rounded pill, green "Web" or purple "Torrent", white text, at the cell's
+/// A Source chip: a rounded pill, green "Web", purple "Torrent" or orange "Usenet", white text, at the cell's
 /// left of the cell `x0..x1`. A label too long for the cell (a translation in a narrow column)
 /// is cut with "..."; returns whether it was.
 fn chip(
@@ -1230,10 +1230,10 @@ fn chip(
     if label.is_empty() {
         return false;
     }
-    let fill = if label == "Torrent" {
-        crate::theme::colors().chip_torrent
-    } else {
-        crate::theme::colors().chip_web
+    let fill = match label {
+        "Torrent" => crate::theme::colors().chip_torrent,
+        "Usenet" => crate::theme::colors().chip_usenet,
+        _ => crate::theme::colors().chip_web,
     };
     // The cell holds the English key (filters match on it); the chip shows it translated.
     let full = crate::i18n::t(label);

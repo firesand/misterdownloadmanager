@@ -468,13 +468,14 @@ impl RemoteTorrent {
             (State::Probing, Some(_)) => State::Downloading,
             (s, _) => s,
         };
-        let (connections, server, running) = match cur {
+        let (connections, server, networks, running) = match cur {
             Some(c) => (
                 c.connections,
                 c.server,
+                c.networks,
                 c.events.into_iter().map(|e| (e.at, e.text)).collect(),
             ),
-            None => (Vec::new(), None, Vec::new()),
+            None => (Vec::new(), None, Vec::new(), Vec::new()),
         };
         let events = sh
             .events
@@ -516,6 +517,7 @@ impl RemoteTorrent {
             }),
             events,
             server,
+            networks,
         }
     }
 }

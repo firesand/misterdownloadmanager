@@ -397,6 +397,10 @@ pub struct Item {
     /// (or its one file, once known).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub remote: Option<RemoteSpec>,
+    /// A Usenet download (usenet.rs): its `url` is the NZB kept for it, `dest` its one file or
+    /// the folder of its files.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub usenet: Option<crate::usenet::UsenetSpec>,
     #[serde(skip)]
     pub live: Option<Live>,
     /// The session's temporary view while a torrent is being checked; never saved.
@@ -447,6 +451,8 @@ pub enum Job {
     Torrent(crate::torrents::Run),
     /// A torrent through a debrid account, then its files over HTTP (#44).
     Remote(mdm_debrid::torrents::RemoteTorrent),
+    /// An NZB's files from a news server (usenet.rs).
+    Usenet(crate::usenet::Run),
 }
 
 /// A torrent sent to a debrid account (#44).
@@ -511,6 +517,7 @@ fn tool_snapshot(p: mdm_tools::video::Progress, url: &Url) -> mdm_engine::Snapsh
             .collect(),
         // yt-dlp's and gallery-dl's connections are theirs: not seen here (#140).
         server: None,
+        networks: Vec::new(),
     }
 }
 
@@ -521,6 +528,7 @@ impl Job {
             Job::File(d) => d.snapshot(),
             Job::Torrent(t) => t.snapshot(),
             Job::Remote(r) => r.snapshot(),
+            Job::Usenet(u) => u.snapshot(),
             Job::Video { job, url } => tool_snapshot(job.progress(), url),
             Job::Gallery { job, url } => tool_snapshot(job.progress(), url),
         }
@@ -533,6 +541,7 @@ impl Job {
             Job::Gallery { job, .. } => job.stop(),
             Job::Torrent(t) => t.cancel(),
             Job::Remote(r) => r.cancel(),
+            Job::Usenet(u) => u.cancel(),
         }
     }
 
@@ -543,6 +552,7 @@ impl Job {
             Job::File(d) => d.set_speed_limit(rate),
             Job::Torrent(t) => t.set_speed_limit(rate),
             Job::Remote(r) => r.set_speed_limit(rate),
+            Job::Usenet(u) => u.set_speed_limit(rate),
             Job::Video { .. } | Job::Gallery { .. } => {}
         }
     }
@@ -551,6 +561,7 @@ impl Job {
         match self {
             Job::File(d) => d.speed_limit(),
             Job::Torrent(t) => t.speed_limit(),
+            Job::Usenet(u) => u.speed_limit(),
             Job::Remote(_) | Job::Video { .. } | Job::Gallery { .. } => None,
         }
     }
@@ -700,6 +711,7 @@ impl Item {
             server: None,
             direct: false,
             remote: None,
+            usenet: None,
             live: None,
             torrent_check: None,
             snap: None,

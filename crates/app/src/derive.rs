@@ -299,6 +299,7 @@ pub fn derive(s: &Seeds) -> Palette {
         row_pressed: toward(surface, 0.12),
         chip_web: readable(s.success, Color32::WHITE, 3.0),
         chip_torrent: Color32::from_rgb(0x7e, 0x4f, 0xd0),
+        chip_usenet: Color32::from_rgb(0xb3, 0x5c, 0x0f),
         chip_text: Color32::WHITE,
         drag_ghost: with_alpha(toward(surface, 0.4), 160),
         marquee: with_alpha(accent, 0x40),

@@ -76,6 +76,11 @@ pub fn describe(e: &Error) -> String {
         Error::SlowConnection => {
             t("much slower than the other connections; reconnecting").to_owned()
         }
+        Error::NetworkOff(name) => fmt(
+            // i18n: why a connection closed: the network it used (Wi-Fi, Ethernet, a phone; Downloads → Combine networks) was switched off or disconnected; {network} its name
+            t("the network {network} is off or disconnected"),
+            &[("network", name)],
+        ),
         Error::ChecksumMismatch(algorithm) => fmt(
             t("the file's {algorithm} checksum doesn't match (the data is kept; redownload it)"),
             &[("algorithm", &ltr(algorithm))],
@@ -311,7 +316,7 @@ fn http(e: &reqwest::Error) -> String {
 }
 
 /// An OS message without its "(os error N)" tail and final period.
-fn os_text(s: &str) -> String {
+pub(crate) fn os_text(s: &str) -> String {
     const TAIL: &str = " (os error "; // not translated: Rust's own wording, parsed
     let s = match s.rfind(TAIL) {
         Some(i) if s.ends_with(')') => &s[..i],

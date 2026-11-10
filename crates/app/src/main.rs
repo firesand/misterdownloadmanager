@@ -30,6 +30,8 @@ mod list;
 mod model;
 mod native;
 mod netwatch;
+mod networks;
+mod networksdlg;
 mod options;
 mod pacfetch;
 mod palette;
@@ -62,6 +64,7 @@ mod tray;
 #[cfg(unix)]
 mod unix;
 mod update;
+mod usenet;
 mod videodlg;
 mod wake;
 mod whereis;
@@ -106,8 +109,27 @@ pub fn offscreen() -> bool {
 /// address came from it, and was fetched).
 pub fn clipboard_text() -> Option<String> {
     read_clipboard(offscreen(), || {
-        arboard::Clipboard::new().ok()?.get_text().ok()
+        with_clipboard(|c| c.get_text().ok()).flatten()
     })
+}
+
+/// The system's clipboard, opened once and kept for the next read. The clipboard monitor reads
+/// it every second, and opening it anew each time connected to the display server each time:
+/// on a Wayland desktop without the data-control protocol (GNOME) every one of those tries
+/// failed over to X11 with a warning, one line a second, which pushed everything else out of
+/// the log a crash report quotes. While another read holds it (a program slow to hand over
+/// what it copied), a read opens its own rather than wait behind it.
+fn with_clipboard<T>(f: impl FnOnce(&mut arboard::Clipboard) -> T) -> Option<T> {
+    static KEPT: std::sync::Mutex<Option<arboard::Clipboard>> = std::sync::Mutex::new(None);
+    match KEPT.try_lock() {
+        Ok(mut kept) => {
+            if kept.is_none() {
+                *kept = arboard::Clipboard::new().ok();
+            }
+            kept.as_mut().map(f)
+        }
+        Err(_) => arboard::Clipboard::new().ok().as_mut().map(f),
+    }
 }
 
 fn read_clipboard(off: bool, read: impl FnOnce() -> Option<String>) -> Option<String> {

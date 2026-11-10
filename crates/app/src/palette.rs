@@ -248,6 +248,7 @@ palette! {
     row_pressed: "row.pressed", "A list row pressed" = grey(0x4f), grey(0xe8);
     chip_web: "chip.web", "The download list's Web chip" = rgb(0x2e, 0x9d, 0x52), rgb(0x2e, 0x9d, 0x52);
     chip_torrent: "chip.torrent", "The download list's Torrent chip" = rgb(0x7e, 0x4f, 0xd0), rgb(0x7e, 0x4f, 0xd0);
+    chip_usenet: "chip.usenet", "The download list's Usenet chip" = rgb(0xb3, 0x5c, 0x0f), rgb(0xb3, 0x5c, 0x0f);
     chip_text: "chip.text", "Text on a chip" = grey(0xff), grey(0xff);
     drag_ghost: "list.drag-ghost", "A column header being dragged" = rgba(0x60, 0x60, 0x60, 160), rgba(0x60, 0x60, 0x60, 160);
     marquee: "list.marquee", "The rubber band that selects rows" = rgba(0x33, 0x99, 0xff, 0x40), rgba(0x33, 0x99, 0xff, 0x40);
@@ -261,7 +262,10 @@ palette! {
     // ---- menu bar and menus ----
     menubar: "menubar", "The menu bar" = grey(0x20), grey(0xff);
     menubar_bottom: "menubar.bottom", "The menu bar's last row" = grey(0x20), grey(0xf2);
-    menubar_line: "menubar.line", "The line under the menu bar" = grey(0xf0), grey(0xf0);
+    // Dark: the bar's own colour. It was the light look's #f0f0f0, which with the toolbar's
+    // top lines below (also the light look's) drew a bright white line across the whole dark
+    // window (#379).
+    menubar_line: "menubar.line", "The line under the menu bar" = grey(0x20), grey(0xf0);
     menubar_hot: "menubar.hot", "A menu title under the pointer" = grey(0x50), grey(0xf5);
     menubar_open: "menubar.open", "The open menu's title" = grey(0x50), grey(0xf9);
     menu: "menu", "A menu's background" = grey(0x2b), grey(0xf9);
@@ -273,8 +277,10 @@ palette! {
     menu_glyph: "menu.glyph", "Bullets, ticks and submenu arrows" = grey(0xff), grey(0x1a);
     menu_text_disabled: "menu.text.disabled", "A greyed menu item" = grey(0x6d), grey(0x9f);
     // ---- toolbar ----
-    toolbar_line: "toolbar.line", "The toolbar's top line" = grey(0xa0), grey(0xa0);
-    toolbar_line_light: "toolbar.line.light", "The highlight under it" = grey(0xff), grey(0xff);
+    // Dark: an etched line's dark colours (`etch.shadow`, `etch.light`), not the light look's
+    // #a0a0a0 over white (#379).
+    toolbar_line: "toolbar.line", "The toolbar's top line" = grey(0x22), grey(0xa0);
+    toolbar_line_light: "toolbar.line.light", "The highlight under it" = grey(0x50), grey(0xff);
     toolbar_hot: "toolbar.hot", "A toolbar button under the pointer" = rgb(0x33, 0x41, 0x4d), rgb(0xe5, 0xf3, 0xff);
     toolbar_hot_faint: "toolbar.hot.faint", "A split button's other part while one is under the pointer" = rgb(0x37, 0x3b, 0x3f), rgb(0xf3, 0xf9, 0xff);
     toolbar_pressed: "toolbar.pressed", "A toolbar button pressed" = rgb(0x2a, 0x36, 0x40), rgb(0xcc, 0xe8, 0xff);

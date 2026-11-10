@@ -23,6 +23,7 @@ mdm-mcp = { path = "crates/mcp" }
 mdm-remote = { path = "crates/remote" }
 mdm-tools = { path = "crates/tools" }
 mdm-torrent = { path = "crates/torrent" }
+mdm-usenet = { path = "crates/usenet" }
 
 # storytold craft-libs (D-003), pinned by commit.
 craft-atomic = { git = "https://github.com/storytold/craft-libs", rev = "1a11a4897865f7410c40d25ca6e452ce399a1a2c" }

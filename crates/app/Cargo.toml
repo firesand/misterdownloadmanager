@@ -40,6 +40,8 @@ mdm-ipc.workspace = true
 mdm-remote.workspace = true
 mdm-tools.workspace = true
 mdm-torrent.workspace = true
+# Usenet downloads (NZB files, usenet.rs).
+mdm-usenet.workspace = true
 open.workspace = true
 reqwest.workspace = true
 serde.workspace = true

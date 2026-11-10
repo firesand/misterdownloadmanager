@@ -216,6 +216,24 @@ pub struct Settings {
     /// adapter (its name as the system shows it, or one of its addresses), or none at all; ""
     /// lets the system choose.
     pub net_adapter: String,
+    /// Downloads → Combine networks: file downloads go through every ticked network at once
+    /// (`networks`), each with connections of its own, instead of the one `net_adapter`.
+    pub combine_networks: bool,
+    /// Downloads → Combine networks: what is known of each network adapter (whether it is
+    /// combined, the user's name for it, its limits), in the order they were first seen.
+    pub networks: Vec<crate::networks::Pref>,
+    /// Tasks → Usenet server…: the news server NZB files are downloaded from (its address;
+    /// empty: none set), and the account on it.
+    pub usenet_host: String,
+    pub usenet_port: u16,
+    /// Secure from the first byte (TLS, port 563).
+    pub usenet_tls: bool,
+    pub usenet_user: String,
+    /// Sealed on disk like the proxy's (`sealed`), in the keychain where there is one.
+    #[serde(with = "sealed")]
+    pub usenet_pass: String,
+    /// The connections the account allows at once.
+    pub usenet_connections: u32,
     /// "Use FTP in PASV mode": passive data connections (the client connects; works behind
     /// NAT), else active. Named anew when FTP arrived: `ftp_pasv` was saved as false while
     /// the box was greyed.
@@ -424,6 +442,14 @@ impl Default for Settings {
             dns_nextdns_id: String::new(),
             dns_fallback: false,
             net_adapter: String::new(),
+            combine_networks: false,
+            networks: Vec::new(),
+            usenet_host: String::new(),
+            usenet_port: 563,
+            usenet_tls: true,
+            usenet_user: String::new(),
+            usenet_pass: String::new(),
+            usenet_connections: 8,
             ftp_passive: true,
             site_logins: Vec::new(),
             debrid_accounts: Vec::new(),
@@ -503,6 +529,18 @@ impl Settings {
             },
             &self.proxy_pass,
         );
+        if !self.usenet_pass.is_empty() {
+            disk.usenet_pass = kept(
+                "usenet".into(),
+                &|| {
+                    format!(
+                        "Mister Download Manager: Usenet {} ({})",
+                        self.usenet_host, self.usenet_user
+                    )
+                },
+                &self.usenet_pass,
+            );
+        }
         for (a, d) in self.debrid_accounts.iter().zip(&mut disk.debrid_accounts) {
             d.secret = kept(
                 format!("debrid/{}", a.id),

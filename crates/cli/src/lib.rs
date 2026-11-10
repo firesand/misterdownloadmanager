@@ -63,6 +63,11 @@ enum Cmd {
         /// sent and the download fails.
         #[arg(long)]
         adapter: Option<String>,
+        /// Combine these network adapters (their names, as `--adapter`; repeat it or separate
+        /// them with commas): each gets its own connections, held to it, and their speeds add
+        /// up (Wi-Fi and Ethernet, a tethered phone). An adapter that isn't there is left out.
+        #[arg(long, value_delimiter = ',', conflicts_with = "adapter")]
+        combine: Vec<String>,
         /// Download the address itself, never through a debrid account. Without it, a link
         /// from a file host that an account in the app's Options → Accounts takes goes through
         /// that account, as in the app.
@@ -443,6 +448,7 @@ async fn run(cmd: Cmd, json: bool, accounts: Option<&dyn Accounts>) -> anyhow::R
             checksum,
             dns,
             adapter,
+            combine,
             direct,
         } => {
             let dest = if output.is_dir() {
@@ -458,6 +464,18 @@ async fn run(cmd: Cmd, json: bool, accounts: Option<&dyn Accounts>) -> anyhow::R
                 route: adapter.map_or(mdm_engine::Route::Any, |a| {
                     mdm_engine::net::route_for(&a, &mdm_engine::net::adapters())
                 }),
+                networks: {
+                    let adapters = mdm_engine::net::adapters();
+                    combine
+                        .iter()
+                        .map(|a| a.trim())
+                        .filter(|a| !a.is_empty())
+                        .map(|a| {
+                            let route = mdm_engine::net::route_for(a, &adapters);
+                            mdm_engine::net::Network::new(a, a, route)
+                        })
+                        .collect()
+                },
                 ..opts(connections)
             };
             let opts = through_account(accounts, &url, direct, opts, json).await?;
@@ -1171,6 +1189,13 @@ async fn watch(dl: Download, json: bool) -> anyhow::Result<()> {
                 "speed": speed as u64,
                 "connections": active,
                 "segments": s.segments.len(),
+                "networks": s.networks.iter().map(|n| json!({
+                    "id": n.id,
+                    "downloaded": n.downloaded,
+                    "speed": n.speed,
+                    "connections": n.connections,
+                    "on": n.on,
+                })).collect::<Vec<_>>(),
             }));
         } else {
             let pct = s.size.map_or(String::new(), |t| {
@@ -1195,7 +1220,8 @@ async fn watch(dl: Download, json: bool) -> anyhow::Result<()> {
     if !json {
         println!();
     }
-    let file = dl.snapshot().file;
+    let last_view = dl.snapshot();
+    let (file, networks) = (last_view.file, last_view.networks);
     match dl.wait().await {
         Ok(out) => {
             let secs = started.elapsed().as_secs_f64();
@@ -1209,6 +1235,9 @@ async fn watch(dl: Download, json: bool) -> anyhow::Result<()> {
                     out.path.display(),
                     mb(out.size)
                 );
+                for n in &networks {
+                    println!("  {}: {}", n.label, mb(n.downloaded));
+                }
             }
             Ok(())
         }

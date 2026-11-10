@@ -485,6 +485,19 @@ Bug fixes from the first days of 0.5.0, a Safari extension, and more file types.
   ([#311](https://github.com/anefzaoui/misterdownloadmanager/issues/311))
 - ✅ The Download video button on YouTube in Chrome, Edge, Brave, Opera and Vivaldi
 
+## Combined build (Plexo's capabilities)
+
+- ✅ Combine networks: a download over several networks at once, each with its own
+  connections, name, speed limit and data allowance; switched on and off while downloads run
+- ✅ Usenet: NZB files from a news server
+- ✅ Dark mode's white line under the menu bar
+  ([#379](https://github.com/anefzaoui/misterdownloadmanager/issues/379))
+- ✅ Download video remembers the last folder
+  ([#475](https://github.com/anefzaoui/misterdownloadmanager/issues/475))
+- ✅ Linux: the clipboard watch's warning every second in the log
+- 📋 Telegram downloads (Plexo has them; not ported)
+- 📋 Combine networks for torrents and video pages (they go through one adapter)
+
 ## Being worked on
 
 These ship in a later version, when they're ready.

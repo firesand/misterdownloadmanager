@@ -5,6 +5,17 @@ Each release's notes on GitHub come from its section here (`## [X.Y.Z]`, see
 
 ## [Unreleased]
 
+### Added
+
+- **Combine networks** (Downloads → Combine networks…): file downloads go through several networks at once, such as Wi-Fi and Ethernet or a phone on USB, each with connections of its own, so their speeds add up. Tick the networks to use; switch one off while downloads run and the others carry on with its part, switch it back on and it rejoins. Each network can have its own name, speed limit and data allowance per day, week or month; a used-up allowance leaves the network out until the next period. The progress window says which network each connection uses, and the status strip how fast each network is. From the command line: `get <url> --combine <adapter>,<adapter>`. The capability comes from Plexo.
+- **Usenet**: Tasks → Open NZB file… downloads the files an NZB describes from the news server set in Tasks → Usenet server… (with a Test button), with resume, the speed limits and, with Combine networks on, over every ticked network. An `.nzb` given on the command line or dropped on the window is opened the same way. The capability comes from Plexo.
+
+### Fixed
+
+- Dark mode: no more bright white line under the menu bar. The classic look's dark colours for that line and for the toolbar's top edge were the light look's ([#379](https://github.com/anefzaoui/misterdownloadmanager/issues/379)).
+- **Download video** remembers the folder you chose for the next video, as Download File Info does for a file, when **Options → Save to → Change folder for … category on last selected** is on. It offered the Video folder again every time ([#475](https://github.com/anefzaoui/misterdownloadmanager/issues/475)).
+- Linux: watching the clipboard no longer opens a new connection to the desktop every second. On a Wayland desktop without the data-control protocol, such as GNOME, each try fell back to X11 with a warning, which filled the log (and the log excerpt of a crash report) with one line a second.
+
 ## [0.5.2] - 2026-11-09
 
 A big fixes release: YouTube and video downloads, crashes and freezes, downloads on slow disks, the Mac helper, plus a Safari extension, far more file types and a few new columns and options.

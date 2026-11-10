@@ -168,6 +168,10 @@
 #. text in errors.rs
 #. an error: a server on this computer redirected the download to the internet, which would not go through the chosen network adapter; {adapter} its name
 	a server on this computer sent the download elsewhere, which would not go through {adapter}	a server on this computer sent the download elsewhere, which would not go through {adapter}
+#. text in networksdlg.rs
+#. Combine networks: a note at the bottom of the window
+#. \\n starts a new line: break lines where they fit the translation
+	A ticked network that connects later joins the downloads; one whose data allowance is used up waits for its next\nperiod. Torrents and videos go through the adapter chosen in Options \\u{2192} Proxy / Socks.	A ticked network that connects later joins the downloads; one whose data allowance is used up waits for its next\nperiod. Torrents and videos go through the adapter chosen in Options \\u{2192} Proxy / Socks.
 #. text in the Add torrent window
 #. Add trackers: MDM never contacts a tracker on this computer or the local network
 	A tracker on this computer or the local network is never contacted: {line}	A tracker on this computer or the local network is never contacted: {line}
@@ -263,7 +267,8 @@
 #. text in remote.rs
 #. remote control page (on a phone): a magnet link or .torrent file was added; MDM reads the torrent's files first
 	Added. MDM is reading the torrent: it joins the list in a moment.	Added. MDM is reading the torrent: it joins the list in a moment.
-#. text in the Batch download window; text in a dialog box; label in the Options window; text in a download's progress window
+#. text in the Batch download window; text in a dialog box; text in networksdlg.rs; label in the Options window; text in a download's progress window
+#. Combine networks: column title: the network adapter's address on its network (an IP address)
 #. noun: the web address (URL)
 #. column title: the web address (URL)
 	Address	Address
@@ -689,6 +694,9 @@
 	Close	Close
 #. what a keyboard shortcut does in the Help menu's windows (About, updates, shortcuts, Tell a friend)
 	Close a menu or dialog	Close a menu or dialog
+#. text in a download's progress window
+#. a connection's state: it closed because its network (Downloads → Combine networks) was switched off or disconnected
+	Closed: its network is off	Closed: its network is off
 #. text in countries.rs
 #. a country's name (where a download's server is)
 	Cocos (Keeling) Islands	Cocos (Keeling) Islands
@@ -701,6 +709,11 @@
 #. text in countries.rs
 #. a country's name (where a download's server is)
 	Colombia	Colombia
+#. window title in networksdlg.rs
+	Combine networks	Combine networks
+#. checkbox in networksdlg.rs
+#. Combine networks: the check box that turns the feature on; the networks are ticked in the list under it
+	Combine the ticked networks for file downloads	Combine the ticked networks for file downloads
 #. text in countries.rs
 #. a country's name (where a download's server is)
 	Comoros	Comoros
@@ -726,7 +739,8 @@
 	Connected	Connected
 #. text in extension.rs
 	Connected: downloads from your browser now come here.	Connected: downloads from your browser now come here.
-#. text in a download's progress window
+#. text in a download's progress window; text in usenet.rs
+#. Usenet server window: shown beside Test while it connects
 #. the trailing ... means it is still going on: keep it
 	Connecting...	Connecting...
 #. text in the Options window
@@ -734,7 +748,8 @@
 	Connection	Connection
 #. page title in the Options window
 	Connections and Limits	Connections and Limits
-#. text in the Options window
+#. text in the Options window; text in usenet.rs
+#. Usenet server window: label before the number of connections the account allows at once
 	Connections:	Connections:
 #. text in countries.rs
 #. a country's name (where a download's server is)
@@ -798,6 +813,9 @@
 	Date order:	Date order:
 #. page title in the Options window
 	Dates and times	Dates and times
+#. text in networks.rs
+#. Combine networks → Settings: the period a network's data allowance is counted over (a choice after "MBytes every")
+	day	day
 #. text in the Options window
 #. a date's order: day first (30/10/2026)
 	Day, month, year	Day, month, year
@@ -921,6 +939,10 @@
 	Download failed	Download failed
 #. window title in a dialog box
 	Download File Info	Download File Info
+#. text in networksdlg.rs
+#. Combine networks: what the window is for, at its top
+#. \\n starts a new line: break lines where they fit the translation
+	Download files through several networks at once (Wi-Fi and Ethernet, a phone on USB, a second line): each gets\nconnections of its own, so their speeds add up. Each network needs its own way to the internet.	Download files through several networks at once (Wi-Fi and Ethernet, a phone on USB, a second line): each gets\nconnections of its own, so their speeds add up. Each network needs its own way to the internet.
 #. text in the Add torrent window
 #. Add torrent, a checkbox: download the files from their start, to watch a video while it downloads
 	Download in order	Download in order
@@ -931,6 +953,9 @@
 #. window title in a dialog box; text in the Options window; checkbox in the Options window; text in the Scheduler window
 #. the Scheduler's page (and checkbox) that caps how much is downloaded in a time
 	Download limits	Download limits
+#. text in networksdlg.rs
+#. Combine networks → Settings: a check box followed by a number box, "MBytes every" and a choice of day, week or month: this network's data allowance (a phone's plan)
+	Download no more than	Download no more than
 #. text in the Scheduler's download limits
 #. {mb} and {hours} are input boxes, drawn where they stand in the translation; keep the one line break: the second line sits under the first box
 #. {mb} = a number of megabytes; {hours} = a number of hours (keep the braces as they are)
@@ -1094,6 +1119,9 @@
 #. text in countries.rs
 #. a country's name (where a download's server is)
 	Eswatini	Eswatini
+#. text in networks.rs
+#. Combine networks: a kind of network, before the adapter's name: "Ethernet (eno2)"
+	Ethernet	Ethernet
 #. text in countries.rs
 #. a country's name (where a download's server is)
 	Ethiopia	Ethiopia
@@ -1302,6 +1330,9 @@
 	from a playlist (yt-dlp)	from a playlist (yt-dlp)
 #. message or event log entry in the main window
 	from a torrent file	from a torrent file
+#. message or event log entry in the main window
+#. where a download came from, in its event log ("Added from an NZB file")
+	from an NZB file	from an NZB file
 #. option (radio button) in the Options window
 #. Options → Sites Logins → Cookies for video sites: read the cookies of the browser chosen in the list after it
 	From browser:	From browser:
@@ -1544,6 +1575,9 @@
 #. text in countries.rs
 #. a country's name (where a download's server is)
 	Israel	Israel
+#. message or event log entry in the main window
+#. why an NZB file can't be downloaded: MDM could not keep its own copy of it
+	it could not be copied into the data folder	it could not be copied into the data folder
 #. text in the Options window
 #. Options → Remote → Status: it could not start; {error} = the system's reason
 #. {error} = an error message (keep the braces as they are)
@@ -1604,7 +1638,7 @@
 #. text in countries.rs
 #. a country's name (where a download's server is)
 	Kazakhstan	Kazakhstan
-#. text in a dialog box; text in a download's progress window; text in the Add torrent window
+#. text in a dialog box; text in networksdlg.rs; text in a download's progress window; text in the Add torrent window
 	KBytes/sec	KBytes/sec
 #. text in the Options window
 #. checkbox: closing keeps MDM running, in the notification area when available or else the taskbar, instead of quitting
@@ -1691,12 +1725,18 @@
 	Liechtenstein	Liechtenstein
 #. checkbox in a dialog box
 	Limit all downloads together to	Limit all downloads together to
+#. checkbox in networksdlg.rs
+#. Combine networks → Settings: a check box followed by a number box and "KBytes/sec": this network's own speed limit
+	Limit its speed to	Limit its speed to
 #. text in a download's progress window
 #. a torrent's progress window, Speed Limiter tab: a limit for what this torrent sends to others
 	Limit uploading	Limit uploading
 #. text in the Add torrent window
 #. Torrent settings: an upload speed limit for all torrents together, followed by a box with the speed and "KBytes/sec"
 	Limit uploading for all torrents to	Limit uploading for all torrents to
+#. text in networksdlg.rs
+#. Combine networks: column title: the network's own speed limit and data allowance
+	Limits	Limits
 #. window title in the Link grabber window; group box title in the Options window
 #. Options → Archives: group box title
 	Link grabber	Link grabber
@@ -1834,6 +1874,9 @@
 #. text in countries.rs
 #. a country's name (where a download's server is)
 	Mayotte	Mayotte
+#. text in networksdlg.rs
+#. Combine networks → Settings: between the data allowance's number box and the choice of day, week or month
+	MBytes every	MBytes every
 #. text in the Options window
 #. Options → Remote → Pair a device: the remote control isn't listening (no network, port taken): the Remote page says why
 	MDM can't be reached on the network now: Options → Remote says why.	MDM can't be reached on the network now: Options → Remote says why.
@@ -1932,6 +1975,9 @@
 #. text in countries.rs
 #. a country's name (where a download's server is)
 	Montenegro	Montenegro
+#. text in networks.rs
+#. Combine networks → Settings: the period a network's data allowance is counted over (a choice after "MBytes every")
+	month	month
 #. text in the Options window
 #. a date's order: month first (10/30/2026)
 	Month, day, year	Month, day, year
@@ -1996,8 +2042,9 @@
 #. text in the Link grabber window; text in the Add torrent window
 #. column title: file name
 	Name	Name
-#. text in categories.rs; text in the Link grabber window; text in rssdlg.rs
+#. text in categories.rs; text in the Link grabber window; text in networksdlg.rs; text in rssdlg.rs
 #. Link grabber: the package's name (a label before its box)
+#. Combine networks → Settings: label before the box with the user's own name for the network
 #. RSS feeds window, Download rules: the rule's name
 	Name:	Name:
 #. text in the Options window
@@ -2021,10 +2068,15 @@
 #. text in countries.rs
 #. a country's name (where a download's server is)
 	Netherlands	Netherlands
+#. text in networksdlg.rs
+#. Combine networks: column title: the network's name (Wi-Fi, Ethernet, a phone)
+	Network	Network
 #. text in the Options window
 	Network adapter:	Network adapter:
 #. text in errors.rs
 	network error	network error
+#. text in networksdlg.rs
+	Networks	Networks
 #. text in the Options window
 	Never show it on these sites:	Never show it on these sites:
 #. button in the Options window
@@ -2123,6 +2175,9 @@
 #. text in the Add torrent window
 #. the magnet link names no tracker (a server that lists a torrent's peers)
 	No trackers	No trackers
+#. text in usenet.rs
+#. a Usenet download's error: no news server is set yet; Tasks → Usenet server… is the menu command that opens its settings
+	no Usenet server is set (Tasks \\u{2192} Usenet server...)	no Usenet server is set (Tasks \\u{2192} Usenet server...)
 #. text in the Download video window
 #. the Download video window: yt-dlp found no video on the page
 	No video found on this page. Play the video, then use the Download video button over it.	No video found on this page. Play the video, then use the Download video button over it.
@@ -2165,6 +2220,9 @@
 #. text in the Add torrent window
 #. Add trackers: a line that isn't a tracker's address (http, https or udp)
 	Not a tracker address: {line}	Not a tracker address: {line}
+#. text in networksdlg.rs
+#. Combine networks: in the Address column of a network that has no address now (a cable out, Wi-Fi off, a phone unplugged)
+	not connected	not connected
 #. text in errors.rs
 	not enough disk space: {needed} needed, {free} free	not enough disk space: {needed} needed, {free} free
 #. text in rssdlg.rs
@@ -2202,6 +2260,9 @@
 #. option (radio button) in the Batch download window
 #. the * in the address runs through numbers
 	Numbers	Numbers
+#. message or event log entry in the main window
+#. the kind of file the Open NZB file dialog lists (NZB: a Usenet download's description, left as is)
+	NZB files	NZB files
 #. text in the Scheduler window
 	October	October
 #. option (radio button) in the Options window
@@ -2285,6 +2346,10 @@
 	Open magnet links and .torrent files with Mister Download Manager	Open magnet links and .torrent files with Mister Download Manager
 #. text in the tray icon's menu
 	Open Mister Download Manager	Open Mister Download Manager
+#. message or event log entry in the main window
+#. title of the message when an NZB file can't be opened
+#. title of the dialog that picks an NZB file to download
+	Open NZB file	Open NZB file
 #. text in extension.rs
 #. step 2 of turning on the Safari extension; Cmd is the Command key
 	Open Safari's settings (Cmd+,).	Open Safari's settings (Cmd+,).
@@ -2363,8 +2428,9 @@
 	Paraguay	Paraguay
 #. text in the Batch download window; text in a dialog box; label in the Options window; text in the Options window; text in a download's Properties window
 	Password	Password
-#. text in the Link grabber window; text in the Options window
+#. text in the Link grabber window; text in the Options window; text in usenet.rs
 #. Link grabber: the package's archives' password (a label before its box)
+#. Usenet server window: label before the account's password
 	Password:	Password:
 #. text in the Add torrent window
 	Paste a magnet link or choose a .torrent file, then Look up.	Paste a magnet link or choose a .torrent file, then Look up.
@@ -2427,9 +2493,10 @@
 #. text in the Options window
 #. Options → Remote → Status: another program uses the port; {port} = its number
 	Port {port} is used by another program: choose another.	Port {port} is used by another program: choose another.
-#. text in the Options window; text in the Add torrent window
+#. text in the Options window; text in the Add torrent window; text in usenet.rs
 #. Options → Remote: label before the port number box
 #. Torrent settings: the port to listen on (empty: any)
+#. Usenet server window: label before the server's port number (563, 119)
 	Port:	Port:
 #. text in countries.rs
 #. a country's name (where a download's server is)
@@ -2569,6 +2636,9 @@
 #. text in the Batch download window
 #. group box title: what the * in the address is replaced with (numbers or letters)
 	Replace asterisk to	Replace asterisk to
+#. text in networksdlg.rs; button in networksdlg.rs
+#. Combine networks → Settings: button that sets the network's used data back to nothing
+	Reset	Reset
 #. text in crashui.rs
 #. crash report window button: start MDM again
 	Restart MDM	Restart MDM
@@ -2679,9 +2749,15 @@
 	Search:	Search:
 #. text in the Batch download window
 	Second file:	Second file:
+#. checkbox in usenet.rs
+#. Usenet server window: check box: the connection to the news server is encrypted (TLS, port 563)
+	Secure connection (TLS)	Secure connection (TLS)
 #. text in a dialog box
 #. title of the folder picker
 	Select a folder	Select a folder
+#. tooltip (why a control is greyed) in networksdlg.rs
+#. tooltip of the greyed Settings... button in Combine networks
+	Select a network in the list first	Select a network in the list first
 #. button in playlistdlg.rs; button in the Add torrent window; text in torrentfiles.rs
 #. button in Download video for a playlist: tick every video
 	Select all	Select all
@@ -2731,7 +2807,8 @@
 #. text in a dialog box; text in the Options window; text in a download's progress window
 #. label before where a download's server is (its country and round trip)
 	Server	Server
-#. text in the Options window; text in a download's Properties window
+#. text in the Options window; text in a download's Properties window; text in usenet.rs
+#. Usenet server window: label before the news server's address (news.example.com)
 	Server:	Server:
 #. text in the Options window
 #. Options → DNS settings: label before the DNS servers' addresses, as IP addresses
@@ -2760,7 +2837,8 @@
 #. a check of Test browser integration: setting it up failed; {error} is the system's own message, in English
 #. {error} = an error message (keep the braces as they are)
 	Setting it up failed: {error}	Setting it up failed: {error}
-#. button in the Options window
+#. text in networksdlg.rs; button in networksdlg.rs; button in the Options window
+#. Combine networks: button that opens the selected network's settings (its name, speed limit and data allowance)
 #. button: opens the DNS's details (how it's asked, its servers, a test)
 #. the trailing ... means it opens a window: keep it
 	Settings...	Settings...
@@ -2919,6 +2997,9 @@
 #. text in countries.rs
 #. a country's name (where a download's server is)
 	Spain	Spain
+#. text in networksdlg.rs
+#. Combine networks: column title: how fast downloads come in through this network now
+	Speed	Speed
 #. text in a download's progress window; text in the tray icon's menu
 #. tab title: the tool that limits the download speed
 	Speed Limiter	Speed Limiter
@@ -3010,6 +3091,9 @@
 #. event log entry: the download stopped to start again through the network adapter as it is now (a VPN reconnected, another adapter chosen)
 	Stopped: the network adapter changed; starting again	Stopped: the network adapter changed; starting again
 #. message or event log entry in the main window
+#. event log entry: the download stopped to start again through the networks as they are now (Combine networks was switched on or off, or a network connected)
+	Stopped: the networks to combine changed; starting again	Stopped: the networks to combine changed; starting again
+#. message or event log entry in the main window
 #. event log entry: the download stopped because the chosen network adapter (a VPN's, usually) went away; {adapter} its name
 	Stopped: {adapter} is not connected; it goes on when it is back	Stopped: {adapter} is not connected; it goes on when it is back
 #. text in a download's progress window
@@ -3082,8 +3166,9 @@
 	Tell a friend	Tell a friend
 #. group box title in the Options window
 	Temporary directory	Temporary directory
-#. button in the Options window
+#. button in the Options window; text in usenet.rs
 #. button: asks the chosen DNS for an address, to see it works
+#. Usenet server window: button that connects to the server and signs in, to check the settings
 	Test	Test
 #. window title in the Options window
 #. window title: Options → General → Test browser integration
@@ -3241,6 +3326,13 @@
 #. text in errors.rs; text in torrent downloads
 #. an error: the network adapter chosen in Options (a VPN's, usually) is off or gone; {adapter} its name
 	the network adapter {adapter} is not connected	the network adapter {adapter} is not connected
+#. text in errors.rs
+#. why a connection closed: the network it used (Wi-Fi, Ethernet, a phone; Downloads → Combine networks) was switched off or disconnected; {network} its name
+	the network {network} is off or disconnected	the network {network} is off or disconnected
+#. text in usenet.rs
+#. Usenet server window: what it is for, at its top. NZB is a file format (left as is)
+#. \\n starts a new line: break lines where they fit the translation
+	The news server NZB files are downloaded from, and your account on it\n(your Usenet provider gives both).	The news server NZB files are downloaded from, and your account on it\n(your Usenet provider gives both).
 #. text in extracting archives (a download's log, the Archive password window)
 #. why an archive wasn't extracted (after "Couldn't extract {name}: ")
 	the password is wrong	the password is wrong
@@ -3270,6 +3362,8 @@
 	The selected download is not complete. Are you sure you want to delete\nit from Mister Download Manager list of downloads?	The selected download is not complete. Are you sure you want to delete\nit from Mister Download Manager list of downloads?
 #. text in errors.rs
 	the server answered {status}	the server answered {status}
+#. text in usenet.rs
+	The server answered: the account works.	The server answered: the account works.
 #. text in errors.rs
 	the server can't send parts of the file, so it can't be resumed	the server can't send parts of the file, so it can't be resumed
 #. text in errors.rs
@@ -3634,6 +3728,9 @@
 #. text in countries.rs
 #. a country's name (where a download's server is)
 	Uruguay	Uruguay
+#. text in networks.rs
+#. Combine networks: a kind of network (a phone or modem on USB), before the adapter's name: "USB (enp0s20u1)"
+	USB	USB
 #. text in the Options window
 	Use advanced browser integration	Use advanced browser integration
 #. button in helpers.rs
@@ -3672,11 +3769,34 @@
 #. text in rssdlg.rs
 #. RSS feeds window, Download rules: the rule is on
 	Use this rule	Use this rule
+#. text in networksdlg.rs
+#. Combine networks: column title: how much was downloaded through this network in its allowance's period (this day, week or month)
+	Used	Used
 #. text in the Options window
 	Used by the list of downloads and the Scheduler.	Used by the list of downloads and the Scheduler.
+#. text in networksdlg.rs
+#. Combine networks → Settings: how much was downloaded through this network this month; {size} like "1.25 GB"
+#. {size} = a file size such as "4.2 MB" (keep the braces as they are)
+	Used this month: {size}	Used this month: {size}
+#. text in networksdlg.rs
+#. Combine networks → Settings: how much was downloaded through this network this week; {size} like "1.25 GB"
+#. {size} = a file size such as "4.2 MB" (keep the braces as they are)
+	Used this week: {size}	Used this week: {size}
+#. text in networksdlg.rs
+#. Combine networks → Settings: how much was downloaded through this network today; {size} like "1.25 GB"
+#. {size} = a file size such as "4.2 MB" (keep the braces as they are)
+	Used today: {size}	Used today: {size}
+#. value in a column's filter list in the download list
+#. where a download comes from: Web (web or FTP server) or Torrent (BitTorrent)
+	Usenet	Usenet
+#. window title in usenet.rs
+	Usenet server	Usenet server
 #. text in the Options window
 #. column title: the user name
 	User	User
+#. text in usenet.rs
+#. Usenet server window: label before the account's user name
+	User name:	User name:
 #. page title in the Options window
 	User names and passwords for servers/sites	User names and passwords for servers/sites
 #. text in the Options window
@@ -3771,6 +3891,9 @@
 	Web	Web
 #. text in the Scheduler window
 	Wednesday	Wednesday
+#. text in networks.rs
+#. Combine networks → Settings: the period a network's data allowance is counted over (a choice after "MBytes every")
+	week	week
 #. text in countries.rs
 #. a country's name (where a download's server is)
 	Western Sahara	Western Sahara
@@ -3785,6 +3908,9 @@
 #. text in remote.rs
 #. remote control page (on a phone): label of the choice: start the new download now, or let it wait in a queue
 	When	When
+#. text in networks.rs
+#. Combine networks: a kind of network, before the adapter's name: "Wi-Fi (wlp2s0)"
+	Wi-Fi	Wi-Fi
 #. text in the Batch download window
 	Wildcard size	Wildcard size
 #. text in the Scheduler window
@@ -3940,6 +4066,10 @@
 #. a kind of file, by its extension: {ext} = "ZIP", "PDF"…
 	{ext} File	{ext} File
 #. message or event log entry in the main window
+#. an NZB file could not be read; {file} its name, {error} why
+#. {error} = an error message (keep the braces as they are)
+	{file} can't be downloaded: {error}	{file} can't be downloaded: {error}
+#. message or event log entry in the main window
 #. {error} = an error message (keep the braces as they are)
 	{file} could not be deleted from the disk: {error}	{file} could not be deleted from the disk: {error}
 #. text in a dialog box
@@ -4005,6 +4135,12 @@
 #. error: a program chosen as a helper is too old; {name} = gallery-dl, {version} = its version, {oldest} = the oldest one MDM can use
 #. {name} = a file name; {version} = a version number (keep the braces as they are)
 	{name} {version} is too old: MDM needs {oldest} or newer	{name} {version} is too old: MDM needs {oldest} or newer
+#. text in networksdlg.rs
+#. window title: the settings of one network in Combine networks; {network} its name (Wi-Fi, Ethernet…)
+	{network} settings	{network} settings
+#. text in a download's progress window
+#. a connection's line in the progress window while networks are combined: {network} the network it uses (Wi-Fi, Ethernet…), {state} what it is doing (Receiving data...)
+	{network}: {state}	{network}: {state}
 #. text in the Options window
 #. a number of connections the app learned by itself for a server
 #. {n} = a number (keep the braces as they are)
@@ -4063,9 +4199,17 @@
 #. text in errors.rs
 #. a debrid service's error in its own words (English); {service} its name
 	{service}: {message}	{service}: {message}
+#. text in networksdlg.rs
+#. Combine networks: in the Used column of a network whose data allowance is used up for its period; {size} like "2.00 GB"
+#. {size} = a file size such as "4.2 MB" (keep the braces as they are)
+	{size} (all of it)	{size} (all of it)
 #. text in a download's Properties window
 #. {size} = a file size such as "4.2 MB"; {bytes} = a number of bytes (keep the braces as they are)
 	{size} ({bytes} Bytes)	{size} ({bytes} Bytes)
+#. text in networksdlg.rs
+#. Combine networks: a network's data allowance in the list: {size} like "2.00 GB", {period} one of day, week, month
+#. {size} = a file size such as "4.2 MB" (keep the braces as they are)
+	{size} a {period}	{size} a {period}
 #. text in remote.rs
 #. remote control page (on a phone): free disk space on the computer; {size} e.g. "120 GB"
 #. {size} = a file size such as "4.2 MB" (keep the braces as they are)
@@ -4513,6 +4657,11 @@ menu	&Tutorials	&Tutorials
 #. & marks the keyboard shortcut letter: keep one & before a letter of the translation
 menu	&Undo	&Undo
 #. menu command in the main window
+#. Tasks menu: the news server and account NZB files are downloaded from
+#. & marks the keyboard shortcut letter: keep one & before a letter of the translation
+#. the trailing ... means it opens a window: keep it
+menu	&Usenet server...	&Usenet server...
+#. menu command in the main window
 #. & marks the keyboard shortcut letter: keep one & before a letter of the translation
 menu	&Video downloads	&Video downloads
 #. menu command in the main window
@@ -4603,6 +4752,11 @@ menu	Classic	Classic
 #. menu command in the main window
 #. & marks the keyboard shortcut letter: keep one & before a letter of the translation
 menu	Clear all &filters	Clear all &filters
+#. menu command in the main window
+#. Downloads menu: opens the window where several networks (Wi-Fi and Ethernet, a phone) are combined for downloads; ticked while they are
+#. & marks the keyboard shortcut letter: keep one & before a letter of the translation
+#. the trailing ... means it opens a window: keep it
+menu	Combine &networks...	Combine &networks...
 #. menu command in the main window
 menu	Copy magnet link	Copy magnet link
 #. menu command in the main window
@@ -4717,6 +4871,11 @@ menu	Open	Open
 menu	Open &torrent file...	Open &torrent file...
 #. menu command in the main window
 menu	Open folder	Open folder
+#. menu command in the main window
+#. Tasks menu: pick an NZB file (a Usenet download's description) and download what it describes
+#. & marks the keyboard shortcut letter: keep one & before a letter of the translation
+#. the trailing ... means it opens a window: keep it
+menu	Open N&ZB file...	Open N&ZB file...
 #. menu command in the main window
 #. View → Theme: opens the folder where theme files go (TOML or JSON)
 menu	Open themes folder	Open themes folder
