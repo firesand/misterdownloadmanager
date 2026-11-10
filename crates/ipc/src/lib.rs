@@ -709,11 +709,13 @@ pub fn parse_args(args: &[String]) -> Option<Command> {
             "exit" => cmd.exit = true,
             "startup" => cmd.startup = true,
             "show" => cmd.show = it.next().map(|w| w.to_ascii_lowercase()),
-            // A bare magnet link or .torrent file (what Windows passes for an association).
+            // A bare magnet link, .torrent file or .nzb file (what the system passes for an
+            // association).
             _ if a
                 .get(..7)
                 .is_some_and(|s| s.eq_ignore_ascii_case("magnet:"))
-                || a.to_ascii_lowercase().ends_with(".torrent") =>
+                || a.to_ascii_lowercase().ends_with(".torrent")
+                || a.to_ascii_lowercase().ends_with(".nzb") =>
             {
                 cmd.url = Some(a.clone());
             }
@@ -749,6 +751,8 @@ mod tests {
     fn bare_magnets_and_torrent_files() {
         let c = parse_args(&["magnet:?xt=urn:btih:abc".into()]).unwrap();
         assert_eq!(c.url.as_deref(), Some("magnet:?xt=urn:btih:abc"));
+        let c = parse_args(&["/home/me/Linux.ISO.nzb".into()]).unwrap();
+        assert_eq!(c.url.as_deref(), Some("/home/me/Linux.ISO.nzb"));
         let c = parse_args(&[r"C:\dl\x.TORRENT".into()]).unwrap();
         assert_eq!(c.url.as_deref(), Some(r"C:\dl\x.TORRENT"));
         assert!(parse_args(&["stray".into()]).is_none());

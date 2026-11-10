@@ -63,6 +63,11 @@ enum Cmd {
         /// sent and the download fails.
         #[arg(long)]
         adapter: Option<String>,
+        /// Combine these network adapters (their names, as `--adapter`; repeat it or separate
+        /// them with commas): each gets its own connections, held to it, and their speeds add
+        /// up (Wi-Fi and Ethernet, a tethered phone). An adapter that isn't there is left out.
+        #[arg(long, value_delimiter = ',', conflicts_with = "adapter")]
+        combine: Vec<String>,
         /// Download the address itself, never through a debrid account. Without it, a link
         /// from a file host that an account in the app's Options → Accounts takes goes through
         /// that account, as in the app.
@@ -132,6 +137,11 @@ enum Cmd {
         /// engine's connections, and yt-dlp's (and the ffmpeg it starts).
         #[arg(long)]
         adapter: Option<String>,
+        /// Combine these network adapters, as `get --combine`: a video that comes as one file
+        /// (or one for the picture and one for the sound) goes through all of them at once;
+        /// one in pieces (HLS, DASH), and what yt-dlp fetches itself, through the first.
+        #[arg(long, value_delimiter = ',', conflicts_with = "adapter")]
+        combine: Vec<String>,
     },
     /// The videos of a playlist or a channel, listed as they come (needs `install-ytdlp`).
     PlaylistInfo {
@@ -468,6 +478,7 @@ async fn run(cmd: Cmd, json: bool, accounts: Option<&dyn Accounts>) -> anyhow::R
             checksum,
             dns,
             adapter,
+            combine,
             direct,
         } => {
             let dest = if output.is_dir() {
@@ -483,6 +494,7 @@ async fn run(cmd: Cmd, json: bool, accounts: Option<&dyn Accounts>) -> anyhow::R
                 route: adapter.map_or(mdm_engine::Route::Any, |a| {
                     mdm_engine::net::route_for(&a, &mdm_engine::net::adapters())
                 }),
+                networks: networks_for(&combine),
                 ..opts(connections)
             };
             let opts = through_account(accounts, &url, direct, opts, json).await?;
@@ -955,12 +967,14 @@ async fn run(cmd: Cmd, json: bool, accounts: Option<&dyn Accounts>) -> anyhow::R
             embed_subs,
             connections,
             adapter,
+            combine,
         } => {
             let route =
                 adapter.map(|a| mdm_engine::net::route_for(&a, &mdm_engine::net::adapters()));
             if let Some(r) = &route {
                 mdm_tools::proc::set_route(r.clone());
             }
+            let networks = networks_for(&combine);
             let subs = subs_arg(&subs, auto_subs, embed_subs);
             let dir = mdm_tools::tools_dir().ok_or_else(|| anyhow::anyhow!("no data folder"))?;
             let tool = mdm_tools::installed(&dir)
@@ -991,7 +1005,14 @@ async fn run(cmd: Cmd, json: bool, accounts: Option<&dyn Accounts>) -> anyhow::R
                 None,
                 &Default::default(),
                 &subs,
-                Some(video_engine(connections, route)),
+                Some(mdm_tools::streams::Engine {
+                    handle: tokio::runtime::Handle::current(),
+                    opts: Options {
+                        route: route.unwrap_or_default(),
+                        networks: networks.clone(),
+                        ..opts(connections)
+                    },
+                }),
             )?;
             loop {
                 tokio::time::sleep(std::time::Duration::from_millis(500)).await;
@@ -1040,10 +1061,18 @@ async fn run(cmd: Cmd, json: bool, accounts: Option<&dyn Accounts>) -> anyhow::R
                                 "path": f,
                                 "subtitles": p.side_files,
                                 "subtitle_problems": problems,
+                                "networks": networks.iter().map(|n| json!({
+                                    "id": n.id,
+                                    "received": n.received(),
+                                })).collect::<Vec<_>>(),
                             }));
                         } else {
                             eprintln!();
                             println!("saved {}", f.display());
+                            // What each combined network carried.
+                            for n in &networks {
+                                println!("  {}: {}", n.label(), mb(n.received()));
+                            }
                             for s in &p.side_files {
                                 println!("saved {}", s.display());
                             }
@@ -1118,6 +1147,20 @@ fn subs_arg(langs: &str, automatic: bool, embed: bool) -> mdm_tools::video::Subs
         automatic,
         embed,
     }
+}
+
+/// `--combine`'s adapters as the networks a download combines; one that isn't there is `Down`.
+fn networks_for(combine: &[String]) -> Vec<std::sync::Arc<mdm_engine::net::Network>> {
+    let adapters = mdm_engine::net::adapters();
+    combine
+        .iter()
+        .map(|a| a.trim())
+        .filter(|a| !a.is_empty())
+        .map(|a| {
+            let route = mdm_engine::net::route_for(a, &adapters);
+            mdm_engine::net::Network::new(a, a, route)
+        })
+        .collect()
 }
 
 /// MDM's engine for a video's streams (#769): this many connections each, through `route`.
@@ -1241,6 +1284,13 @@ async fn watch(dl: Download, json: bool) -> anyhow::Result<()> {
                 "speed": speed as u64,
                 "connections": active,
                 "segments": s.segments.len(),
+                "networks": s.networks.iter().map(|n| json!({
+                    "id": n.id,
+                    "downloaded": n.downloaded,
+                    "speed": n.speed,
+                    "connections": n.connections,
+                    "on": n.on,
+                })).collect::<Vec<_>>(),
             }));
         } else {
             let pct = s.size.map_or(String::new(), |t| {
@@ -1265,7 +1315,8 @@ async fn watch(dl: Download, json: bool) -> anyhow::Result<()> {
     if !json {
         println!();
     }
-    let file = dl.snapshot().file;
+    let last_view = dl.snapshot();
+    let (file, networks) = (last_view.file, last_view.networks);
     match dl.wait().await {
         Ok(out) => {
             let secs = started.elapsed().as_secs_f64();
@@ -1279,6 +1330,9 @@ async fn watch(dl: Download, json: bool) -> anyhow::Result<()> {
                     out.path.display(),
                     mb(out.size)
                 );
+                for n in &networks {
+                    println!("  {}: {}", n.label, mb(n.downloaded));
+                }
             }
             Ok(())
         }

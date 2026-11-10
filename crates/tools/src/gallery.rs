@@ -415,6 +415,7 @@ impl ByEngine<'_> {
                     segments: Vec::new(),
                     connections,
                     server: None,
+                    networks: Vec::new(),
                     // A gallery's files each have their own: its page stands for them.
                     address: None,
                 });

@@ -998,6 +998,7 @@ impl Run {
             server: None,
             at_service: None,
             finishing: None,
+            networks: Vec::new(),
         };
         if *self.stopped.lock().unwrap() {
             s.state = State::Cancelled;

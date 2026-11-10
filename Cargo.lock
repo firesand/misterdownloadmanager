@@ -4538,6 +4538,7 @@ dependencies = [
  "mdm-remote",
  "mdm-tools",
  "mdm-torrent",
+ "mdm-usenet",
  "objc2 0.6.5",
  "objc2-app-kit 0.3.2",
  "objc2-foundation 0.3.2",
@@ -4829,6 +4830,26 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "url",
+]
+
+[[package]]
+name = "mdm-usenet"
+version = "0.5.2"
+dependencies = [
+ "craft-atomic",
+ "crc32fast",
+ "mdm-engine",
+ "roxmltree",
+ "rustls",
+ "rustls-platform-verifier",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror 2.0.21",
+ "tokio",
+ "tokio-rustls",
+ "tokio-util",
+ "tracing",
 ]
 
 [[package]]

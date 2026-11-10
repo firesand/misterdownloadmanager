@@ -127,6 +127,14 @@ pub struct Options {
     /// Options → Proxy / Socks → Network adapter (#35): the adapter every connection goes
     /// through, or none at all.
     pub route: crate::net::Route,
+    /// The networks this download combines (Wi-Fi and Ethernet, a tethered phone…): each gets
+    /// `connections()` connections of its own, held to its adapter, and the free ones split
+    /// what is left of the file, so the networks' speeds add up and a faster one carries more.
+    /// A network switched off or disconnected while the download runs loses its connections,
+    /// and gets them back when it returns. With any, `route` is ignored: the first usable
+    /// network makes the first request, and FTP goes through it alone. Empty: nothing is
+    /// combined (the default).
+    pub networks: Vec<Arc<net::Network>>,
     /// A service account that unlocks this download's link first (#44, `crate::unlock`): asked
     /// before the first request and when the direct link dies. Not in the resume state (like
     /// the headers): whoever resumes gives it again.
@@ -254,6 +262,7 @@ impl Default for Options {
             hosts: Vec::new(),
             dns: Default::default(),
             route: Default::default(),
+            networks: Vec::new(),
             unlocker: None,
             proxy: Proxy::None,
             global: None,
@@ -297,6 +306,25 @@ impl Options {
     /// `request_cap`, when it applies: some bytes, without a form's POST.
     fn cap(&self) -> Option<u64> {
         self.request_cap.filter(|c| *c > 0 && self.post.is_none())
+    }
+
+    /// With networks to combine: `route` set to the first usable one's (the first request's,
+    /// and FTP's), and its place in `networks`; none usable is `Route::Down`, so nothing leaves
+    /// another way. Without any, `route` stays as given.
+    fn settle_route(&mut self) -> Option<usize> {
+        if self.networks.is_empty() {
+            return None;
+        }
+        match net::primary(&self.networks) {
+            Some((i, route)) => {
+                self.route = route;
+                Some(i)
+            }
+            None => {
+                self.route = net::none_usable(&self.networks);
+                Some(0)
+            }
+        }
     }
 }
 
@@ -391,6 +419,10 @@ pub enum Error {
     /// segment (not a failure).
     #[error("much slower than the other connections; reconnecting")]
     SlowConnection,
+    /// This connection's network (`Options::networks`) was switched off or disconnected: the
+    /// connection ends, and the other networks go on with its part (not a failure).
+    #[error("the network {0} is off or disconnected")]
+    NetworkOff(String),
     /// The finished file doesn't have the expected hash; it stays as the part file.
     #[error("the file's {0} checksum doesn't match (the data is kept; redownload it)")]
     ChecksumMismatch(&'static str),
@@ -752,6 +784,8 @@ pub enum ConnStatus {
         host: String,
         cap: u32,
     },
+    /// Closed because its network was switched off or disconnected (`Options::networks`).
+    NetworkOff,
 }
 
 #[derive(Clone, Debug)]
@@ -761,6 +795,24 @@ pub struct ConnView {
     pub status: ConnStatus,
     /// Bytes/s over the current response (0 while not receiving).
     pub speed: u64,
+    /// The network it goes through, as its place in `Snapshot::networks`; None when the
+    /// download combines none.
+    pub network: Option<usize>,
+}
+
+/// One of the networks a download combines (`Options::networks`), as it stands.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct NetView {
+    pub id: String,
+    pub label: String,
+    /// Bytes of this download that came through it (this run).
+    pub downloaded: u64,
+    /// Bytes/s through it now.
+    pub speed: u64,
+    /// Its connections open now.
+    pub connections: u32,
+    /// Switched on and connected.
+    pub on: bool,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -796,6 +848,8 @@ pub struct Snapshot {
     /// How far `Verifying` (the bytes checked) or `Merging` has come, 0 to 1, when that is
     /// known (#736).
     pub finishing: Option<f64>,
+    /// The networks it combines and what each carried; empty when it combines none.
+    pub networks: Vec<NetView>,
 }
 
 /// One entry of a download's event log; `seq` counts up within one `Download`.
@@ -873,6 +927,10 @@ pub async fn probe_kept(
     headers: HeaderMap,
     opts: &Options,
 ) -> Result<(ProbeInfo, Option<KeptAnswer>), Error> {
+    // Combining networks: the look goes through the first usable one.
+    let mut settled = opts.clone();
+    settled.settle_route();
+    let opts = &settled;
     if crate::ftp::is_ftp(&url) {
         let site = crate::ftp::Site::new(&url, &headers, opts)?;
         let facts = site.check().await?;
@@ -1009,7 +1067,9 @@ pub async fn probe_kept(
 /// A client for requests to `url`'s server that aren't downloads (a debrid service's API, #44):
 /// the same proxy, DNS and network adapter as `opts`' downloads.
 pub fn http_client(opts: &Options, url: &Url) -> Result<Client, Error> {
-    client(opts, url, &AsGet::default(), &Default::default())
+    let mut opts = opts.clone();
+    opts.settle_route();
+    client(&opts, url, &AsGet::default(), &Default::default())
 }
 
 /// A client for one request to `url`'s server, as [`http_client`]'s, that follows no redirect
@@ -1018,7 +1078,9 @@ pub fn http_client(opts: &Options, url: &Url) -> Result<Client, Error> {
 /// headers go there (the browser's quality menu reading a stream's manifest, mdm-tools'
 /// `manifest`: the browser's cookie never reaches another server).
 pub fn hop_client(opts: &Options, url: &Url) -> Result<Client, Error> {
-    client_with(opts, url, &AsGet::default(), &Default::default(), false)
+    let mut opts = opts.clone();
+    opts.settle_route();
+    client_with(&opts, url, &AsGet::default(), &Default::default(), false)
 }
 
 /// The file's name: the server's (Content-Disposition), else the service's (#44), else the
@@ -1196,11 +1258,12 @@ impl Download {
                 server: None,
                 at_service: None,
                 finishing: None,
+                networks: Vec::new(),
             }),
             seen: Default::default(),
+            lanes: Default::default(),
             planner: Mutex::new(None),
             limiter: Limiter::new(None),
-            best_speed: Default::default(),
             disk_held: Default::default(),
             held: Default::default(),
             checked: Default::default(),
@@ -1282,11 +1345,11 @@ struct Shared {
     /// What the download's client learnt of its server (#140); the look's when it went on
     /// from the look's answer.
     seen: std::sync::OnceLock<Arc<crate::server::ServerSeen>>,
+    /// The networks its connections go through (`Lane`); one, of no network, when it combines
+    /// none.
+    lanes: std::sync::OnceLock<Arc<Vec<Lane>>>,
     planner: Mutex<Option<Planner>>,
     limiter: Limiter,
-    /// The best speed one connection of this download sustained (`yardstick`), bytes/s: what a good
-    /// connection to this server does, the yardstick for shedding.
-    best_speed: std::sync::atomic::AtomicU64,
     /// When a connection last stood still for the disk for `DISK_HELD` or longer (`Pace`).
     disk_held: Mutex<Option<std::time::Instant>>,
     /// Bytes received and claimed but not yet written, in the connections' buffers: shown as
@@ -1300,6 +1363,31 @@ impl Shared {
     fn snapshot(&self) -> Snapshot {
         let mut s = self.view.lock().unwrap().clone();
         s.server = self.seen.get().and_then(|seen| seen.get());
+        if let Some(lanes) = self.lanes.get() {
+            s.networks = lanes
+                .iter()
+                .enumerate()
+                .filter_map(|(i, lane)| {
+                    let net = lane.net.as_ref()?;
+                    let open = s.connections.iter().filter(|c| {
+                        c.network == Some(i)
+                            && matches!(c.status, ConnStatus::Connecting | ConnStatus::Receiving)
+                    });
+                    Some(NetView {
+                        id: net.id.clone(),
+                        label: net.label(),
+                        downloaded: lane.received.load(Ordering::Relaxed),
+                        speed: open
+                            .clone()
+                            .filter(|c| matches!(c.status, ConnStatus::Receiving))
+                            .map(|c| c.speed)
+                            .sum(),
+                        connections: open.count() as u32,
+                        on: net.usable(),
+                    })
+                })
+                .collect();
+        }
         if let Some(p) = self.planner.lock().unwrap().as_ref() {
             s.downloaded = p.downloaded() + self.held.load(Ordering::Relaxed);
             s.segments = p
@@ -1349,6 +1437,7 @@ impl Shared {
                     downloaded: 0,
                     status: ConnStatus::Connecting,
                     speed: 0,
+                    network: None,
                 });
                 v.connections.len() - 1
             }
@@ -1366,6 +1455,58 @@ impl Shared {
     }
 }
 
+/// One of the networks a download's connections go through (`Options::networks`), or the one
+/// route of a download that combines none (`net`: None). Each has its own client: its own pool,
+/// name lookups and binding, so nothing of one network's leaves through another.
+struct Lane {
+    net: Option<Arc<net::Network>>,
+    /// The client for its route as it was when built; built again when the route changes (the
+    /// adapter got another address).
+    client: Mutex<Option<(net::Route, Client)>>,
+    /// The route no client could be built for (the server's address is of a family the adapter
+    /// lacks): not tried again until the route changes.
+    unfit: Mutex<Option<net::Route>>,
+    /// The best speed one connection on it sustained (`yardstick`), bytes/s: what a good connection
+    /// to this server does over this network, the yardstick for shedding. Per network: a
+    /// connection on the slower one is not slow for being on it.
+    best_speed: std::sync::atomic::AtomicU64,
+    /// Bytes of this download that came through it.
+    received: std::sync::atomic::AtomicU64,
+}
+
+impl Lane {
+    fn new(net: Option<Arc<net::Network>>) -> Lane {
+        Lane {
+            net,
+            client: Mutex::new(None),
+            unfit: Mutex::new(None),
+            best_speed: Default::default(),
+            received: Default::default(),
+        }
+    }
+
+    /// Whether connections may use it now.
+    fn on(&self) -> bool {
+        self.net.as_ref().is_none_or(|n| n.usable())
+    }
+
+    fn label(&self) -> String {
+        self.net.as_ref().map(|n| n.label()).unwrap_or_default()
+    }
+}
+
+/// The lanes of a download with `opts`: one per network to combine, else the one of its route.
+fn lanes_for(opts: &Options) -> Arc<Vec<Lane>> {
+    Arc::new(if opts.networks.is_empty() {
+        vec![Lane::new(None)]
+    } else {
+        opts.networks
+            .iter()
+            .map(|n| Lane::new(Some(n.clone())))
+            .collect()
+    })
+}
+
 /// The address ranges are fetched from, with the headers for it. `generation` counts switches.
 #[derive(Clone)]
 struct Target {
@@ -1381,8 +1522,12 @@ const REFRESH_EVERY: Duration = Duration::from_secs(120);
 
 /// What every connection needs to fetch a segment.
 struct Ctx {
-    /// The download's client: every connection's requests go through its pool.
+    /// The download's client: every connection's requests go through its pool. Combining
+    /// networks, the first request's (`first_lane`'s); each lane then has its own (`lane_client`).
     client: Client,
+    lanes: Arc<Vec<Lane>>,
+    /// The lane the first request went through; an FTP download stays on it.
+    first_lane: usize,
     /// The file's version; each range request's `If-Range` is chosen from them.
     validators: Mutex<Validators>,
     /// Where ranges come from now (after redirects); switched when it expires.
@@ -1503,6 +1648,81 @@ impl Ctx {
         self.target.lock().unwrap().clone()
     }
 
+    /// Whether the download combines networks (its lanes are networks).
+    fn combines(&self) -> bool {
+        self.lanes[0].net.is_some()
+    }
+
+    /// The client for lane `i` now; None while its network is off or disconnected, or can't
+    /// reach this server (said once in the event log).
+    fn lane_client(&self, i: usize) -> Option<Client> {
+        let lane = &self.lanes[i];
+        let Some(net) = &lane.net else {
+            return Some(self.client.clone());
+        };
+        if !net.usable() {
+            return None;
+        }
+        let route = net.route();
+        if lane.unfit.lock().unwrap().as_ref() == Some(&route) {
+            return None;
+        }
+        let mut cached = lane.client.lock().unwrap();
+        if let Some((built_for, client)) = cached.as_ref()
+            && *built_for == route
+        {
+            return Some(client.clone());
+        }
+        let mut opts = self.opts.clone();
+        opts.route = route.clone();
+        let seen = self.shared.seen.get_or_init(Default::default).clone();
+        match client(&opts, &self.target().url, &self.as_get, &seen) {
+            Ok(client) => {
+                *cached = Some((route, client.clone()));
+                Some(client)
+            }
+            Err(e) => {
+                self.shared
+                    .event(format!("{}: not used for this download: {e}", net.label()));
+                *lane.unfit.lock().unwrap() = Some(route);
+                None
+            }
+        }
+    }
+
+    /// A client for a request that isn't a connection's own (asking the original address
+    /// again): the first lane's while it is on, else another's.
+    fn any_client(&self) -> Client {
+        std::iter::once(self.first_lane)
+            .chain(0..self.lanes.len())
+            .find_map(|i| self.lane_client(i))
+            .unwrap_or_else(|| self.client.clone())
+    }
+
+    /// The other connections working, and those of them receiving, where a server counts
+    /// them: per network when networks are combined (each has its own address there), else
+    /// for the whole download. `id` itself is left out (it holds no segment when it asks).
+    fn peers(&self, id: WorkerId, lane: usize) -> (usize, usize) {
+        if !self.combines() {
+            return self
+                .shared
+                .with_planner(|p| (p.active_workers(), p.receiving_workers()));
+        }
+        let v = self.shared.view.lock().unwrap();
+        let mine = v
+            .connections
+            .iter()
+            .filter(|c| c.id != id && c.network == Some(lane));
+        let working = mine
+            .clone()
+            .filter(|c| matches!(c.status, ConnStatus::Connecting | ConnStatus::Receiving))
+            .count();
+        let receiving = mine
+            .filter(|c| matches!(c.status, ConnStatus::Receiving))
+            .count();
+        (working, receiving)
+    }
+
     /// After `generation`'s address answered as a dead link: ask the original address for
     /// today's target (once for all connections, at most every `REFRESH_EVERY`) and switch to
     /// it if it is the same file. True when there is a newer target to retry with.
@@ -1520,7 +1740,7 @@ impl Ctx {
             return false;
         }
         let Some((url, mut headers)) = refresh_final_url(
-            &self.client,
+            &self.any_client(),
             origin,
             headers,
             self.opts.post.as_ref(),
@@ -1783,6 +2003,10 @@ async fn run_fresh(
     kept: Option<KeptAnswer>,
 ) -> Result<Outcome, Error> {
     let mut opts = opts;
+    // Combining networks: the first request goes through the first usable one.
+    let mut first_lane = opts.settle_route().unwrap_or(0);
+    let lanes = lanes_for(&opts);
+    let _ = shared.lanes.set(lanes.clone());
     // The first request had to give up the browser's User-Agent (#372).
     let mut asked_as_mdm = false;
     shared.limiter.set(opts.speed_limit);
@@ -1846,7 +2070,50 @@ async fn run_fresh(
                 shared,
                 cancel,
             };
-            let (mut client0, mut first, as_mdm) = ask.at(&mut opts, &target, &asked).await?;
+            // The networks not tried yet that could make the first request instead.
+            let mut tried = vec![first_lane];
+            let (mut client0, mut first, as_mdm) = loop {
+                let spare = |tried: &[usize]| {
+                    lanes
+                        .iter()
+                        .enumerate()
+                        .find(|(i, l)| l.net.is_some() && l.on() && !tried.contains(i))
+                        .map(|(i, _)| i)
+                };
+                // With another network to try, this one isn't waited on for long.
+                let mut asking = opts.clone();
+                if spare(&tried).is_some() {
+                    asking.max_retries = asking.max_retries.min(1);
+                }
+                let got = ask.at(&mut asking, &target, &asked).await;
+                // This network doesn't reach the server (or is gone): the next one may.
+                let failed = match &got {
+                    Ok((_, Err(e), _)) | Err(e) => Some(e),
+                    Ok(_) => None,
+                };
+                if let Some(e) = failed
+                    && (e.transient() || matches!(e, Error::Adapter(_)))
+                    && let Some(next) = spare(&tried)
+                {
+                    shared.event(format!(
+                        "{}: {e}; asking through {}",
+                        lanes[first_lane].label(),
+                        lanes[next].label()
+                    ));
+                    tried.push(next);
+                    first_lane = next;
+                    if let Some(net) = &lanes[next].net {
+                        opts.route = net.route();
+                    }
+                    continue;
+                }
+                let got = got?;
+                // What the request changed stays (#372's User-Agent); its shortened patience
+                // doesn't.
+                asking.max_retries = opts.max_retries;
+                opts = asking;
+                break got;
+            };
             asked_as_mdm = as_mdm;
             // #630: the link refused, where the browser's own download of it ended is asked
             // once, as the link was (the browser's User-Agent first). The link's refusal is
@@ -1862,7 +2129,9 @@ async fn run_fresh(
                     target.host_str().unwrap_or("?"),
                     other.host_str().unwrap_or("?"),
                 ));
+                // Through the network the first request settled on.
                 let mut again = as_given;
+                again.route = opts.route.clone();
                 let headers = scoped_headers(&asked, &target, &other);
                 match ask.at(&mut again, &other, &headers).await {
                     Ok((client1, Ok(answer), as_mdm)) => {
@@ -1875,6 +2144,11 @@ async fn run_fresh(
                         shared.event(format!("{}: {e}", other.host_str().unwrap_or("?")));
                     }
                 }
+            }
+            // Its client is its network's from here on (`lane_client`).
+            if lanes[first_lane].net.is_some() {
+                *lanes[first_lane].client.lock().unwrap() =
+                    Some((opts.route.clone(), client0.clone()));
             }
             // #668: the site refused MDM's connection as a program's (its bot check, or a 412):
             // asked once more, the way a browser connects, at the same address with the same
@@ -2025,6 +2299,8 @@ async fn run_fresh(
         saved.browser_like = browser.is_some();
         let ctx = Arc::new(Ctx {
             client: client0.clone(),
+            lanes: lanes.clone(),
+            first_lane,
             validators: Mutex::new(validators),
             target: Mutex::new(Target {
                 url: final_url.clone(),
@@ -2087,12 +2363,14 @@ async fn run_fresh(
                 } else {
                     body
                 };
-                single_stream(body, &file, shared, opts.global.as_deref(), cancel).await?
+                let lane = &lanes[first_lane];
+                single_stream(body, &file, shared, opts.global.as_deref(), lane, cancel).await?
             }
             Err(e) => return Err(e),
         }
     } else {
-        single_stream(body, &file, shared, opts.global.as_deref(), cancel).await?
+        let lane = &lanes[first_lane];
+        single_stream(body, &file, shared, opts.global.as_deref(), lane, cancel).await?
     };
     verify_part(shared, &dest, checksum.as_ref()).await?;
     finish(shared, file, &dest, size, stamp)
@@ -2209,6 +2487,12 @@ async fn run_fresh_ftp(
     shared: Arc<Shared>,
     cancel: CancellationToken,
 ) -> Result<Outcome, Error> {
+    let mut opts = opts;
+    // Combining networks: an FTP download goes through the first usable one alone (its
+    // sessions are the site's, one route each).
+    let first_lane = opts.settle_route().unwrap_or(0);
+    let lanes = lanes_for(&opts);
+    let _ = shared.lanes.set(lanes.clone());
     shared.limiter.set(opts.speed_limit);
     let (shared, cancel) = (&shared, &cancel);
     let site = Arc::new(crate::ftp::Site::new(&req.url, &req.headers, &opts)?);
@@ -2259,6 +2543,8 @@ async fn run_fresh_ftp(
         let ctx = Arc::new(Ctx {
             // FTP's connections are its own (`ftp`): this client's are none of the server's.
             client: client(&opts, &req.url, &AsGet::default(), &Default::default())?,
+            lanes: lanes.clone(),
+            first_lane,
             validators: Mutex::new(validators),
             target: Mutex::new(Target {
                 url,
@@ -2291,12 +2577,14 @@ async fn run_fresh_ftp(
                 *shared.planner.lock().unwrap() = None;
                 shared.view.lock().unwrap().resumable = Some(false);
                 let t = cancellable(cancel, site.open_at(0, Some(size))).await?;
-                single_stream(Body::Ftp(t), &file, shared, opts.global.as_deref(), cancel).await?
+                let (body, lane) = (Body::Ftp(t), &lanes[first_lane]);
+                single_stream(body, &file, shared, opts.global.as_deref(), lane, cancel).await?
             }
             Err(e) => return Err(e),
         }
     } else {
-        single_stream(first, &file, shared, opts.global.as_deref(), cancel).await?
+        let lane = &lanes[first_lane];
+        single_stream(first, &file, shared, opts.global.as_deref(), lane, cancel).await?
     };
     verify_part(shared, &dest, opts.checksum.as_ref()).await?;
     finish(shared, file, &dest, size, stamp)
@@ -2316,6 +2604,9 @@ async fn run_resume(
     {
         opts.user_agent = agent;
     }
+    let first_lane = opts.settle_route().unwrap_or(0);
+    let lanes = lanes_for(&opts);
+    let _ = shared.lanes.set(lanes.clone());
     shared.limiter.set(opts.speed_limit);
     let bad = |what: &str| Error::BadState(format!("{}: {what}", state_file.display()));
     if state_file != state_path(&saved.dest) {
@@ -2338,6 +2629,9 @@ async fn run_resume(
     let as_get = AsGet::default();
     let seen = shared.seen.get_or_init(Default::default).clone();
     let client = client(&opts, &saved.url, &as_get, &seen)?;
+    if lanes[first_lane].net.is_some() {
+        *lanes[first_lane].client.lock().unwrap() = Some((opts.route.clone(), client.clone()));
+    }
     // Only the browser-like connection got past the site's bot check (#668): it goes on with
     // it, on one connection, at the address it had (MDM's own connection would be refused).
     let browser = match saved.browser_like && crate::browserlike::AVAILABLE {
@@ -2442,6 +2736,8 @@ async fn run_resume(
     );
     let ctx = Arc::new(Ctx {
         client,
+        lanes,
+        first_lane,
         validators: Mutex::new({
             let mut v = saved.validators.clone();
             if opts.ignore_mtime {
@@ -3334,11 +3630,24 @@ where
 async fn supervise(ctx: Arc<Ctx>, first: Option<Body>) -> Result<(), Error> {
     let mut set = JoinSet::new();
     let mut next_id: WorkerId = 0;
+    // An FTP download's connections are its site's, on the first lane's route.
+    // So are a browser-like download's: one connection, the one the site let through (#668).
+    let combines = ctx.combines() && ctx.ftp.is_none() && ctx.browser.is_none();
+    let lane_count = if combines { ctx.lanes.len() } else { 1 };
+    let lane_at = |k: usize| {
+        if combines { k } else { ctx.first_lane }
+    };
+    // Connections started per lane, and whether the lane was on at the last look.
+    let mut started = vec![0u32; lane_count];
+    let mut was_on: Vec<bool> = (0..lane_count)
+        .map(|k| ctx.lanes[lane_at(k)].on())
+        .collect();
     if let Some(body) = first {
         // The probe's body is byte 0 onward: reserve that segment for connection 0 before any
         // other connection can split or take it.
         ctx.shared.with_planner(|p| p.assign(0, None));
-        set.spawn(worker(ctx.clone(), 0, Some(body)));
+        set.spawn(worker(ctx.clone(), 0, ctx.first_lane, Some(body)));
+        started[if combines { ctx.first_lane } else { 0 }] += 1;
         next_id = 1;
     }
     // No more connections than the host is known to allow.
@@ -3349,36 +3658,101 @@ async fn supervise(ctx: Arc<Ctx>, first: Option<Body>) -> Result<(), Error> {
         ctx.shared
             .event(format!("{host} allows {cap} connection(s) (learned)"));
     }
-    let max = learned.map_or(wanted, |c| c.min(wanted));
+    // Per lane: a server counts the connections from one address, and each network has its own.
+    let per_lane = learned.map_or(wanted, |c| c.min(wanted)).max(1);
     // A small file starts with fewer connections (one per INITIAL_PIECE): opened all at once
     // they would cut it into slivers and fetch some twice (benchmark 2026-10-30: 256 KiB took
     // 13-19 requests; IDM, which ramps up in waves, took 4). Later splits still go down to
     // `min_split` as connections free up.
     let size = ctx.shared.with_planner(|p| p.size());
     let by_size = u32::try_from(size.div_ceil(INITIAL_PIECE)).unwrap_or(u32::MAX);
-    let max = max.min(by_size.max(1)).max(1);
+    let max = per_lane
+        .saturating_mul(lane_count as u32)
+        .min(MAX_CONNECTIONS_UNLOCKED)
+        .min(by_size.max(1))
+        .max(1);
+    if combines {
+        let names: Vec<String> = ctx
+            .lanes
+            .iter()
+            .filter(|l| l.on())
+            .map(Lane::label)
+            .collect();
+        ctx.shared
+            .event(format!("Combining networks: {}", names.join(", ")));
+    }
     // A POST the server hasn't shown to take ranges: one connection, until a 206 says the
     // others may follow (a second POST may do the form's work twice).
     let mut held = ctx.wait_for_ranges;
-    while next_id < if held { 1 } else { max } {
-        set.spawn(worker(ctx.clone(), next_id, None));
-        next_id += 1;
-    }
+    // One connection at a time to each lane in turn, so that a file too small for all of them
+    // still starts on every network.
+    let fill = |set: &mut JoinSet<Result<(), Error>>,
+                started: &mut Vec<u32>,
+                next_id: &mut WorkerId,
+                upto: u32| {
+        loop {
+            let mut any = false;
+            for (k, started) in started.iter_mut().enumerate() {
+                if *next_id >= upto {
+                    return;
+                }
+                if *started < per_lane && ctx.lanes[lane_at(k)].on() {
+                    set.spawn(worker(ctx.clone(), *next_id, lane_at(k), None));
+                    *started += 1;
+                    *next_id += 1;
+                    any = true;
+                }
+            }
+            if !any {
+                return;
+            }
+        }
+    };
+    fill(
+        &mut set,
+        &mut started,
+        &mut next_id,
+        if held { 1 } else { max },
+    );
     let mut last_err = None;
+    let mut look = tokio::time::interval(LANE_LOOK);
+    look.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+    // Said once per wait: every network is off or disconnected.
+    let mut waiting = false;
     loop {
         let joined = tokio::select! {
-            joined = set.join_next() => match joined {
-                Some(joined) => joined,
-                None => break,
-            },
+            joined = set.join_next(), if !set.is_empty() => joined.expect("the set isn't empty"),
             () = ctx.range_answered.notified(), if held => {
                 held = false;
-                while next_id < max {
-                    set.spawn(worker(ctx.clone(), next_id, None));
-                    next_id += 1;
+                fill(&mut set, &mut started, &mut next_id, max);
+                continue;
+            }
+            // A network switched on or connected again gets its connections back; with none
+            // running (every network was off), one that is on starts the download again.
+            _ = look.tick(), if combines || set.is_empty() => {
+                let mut back = false;
+                for k in 0..lane_count {
+                    let on = ctx.lanes[lane_at(k)].on();
+                    if on && !was_on[k] {
+                        started[k] = 0;
+                        back = true;
+                        ctx.shared
+                            .event(format!("{} is back", ctx.lanes[lane_at(k)].label()));
+                    }
+                    was_on[k] = on;
+                }
+                let on_now = was_on.iter().any(|on| *on);
+                if (back || (set.is_empty() && on_now)) && !held {
+                    waiting = false;
+                    if set.is_empty() {
+                        started.iter_mut().for_each(|n| *n = 0);
+                    }
+                    let upto = next_id.saturating_add(max);
+                    fill(&mut set, &mut started, &mut next_id, upto);
                 }
                 continue;
             }
+            () = ctx.cancel.cancelled(), if set.is_empty() => return Err(Error::Cancelled),
         };
         match joined.expect("worker panicked") {
             Err(e) if e.is_fatal() => {
@@ -3400,12 +3774,27 @@ async fn supervise(ctx: Arc<Ctx>, first: Option<Body>) -> Result<(), Error> {
             if let Some(e) = last_err.take() {
                 return Err(e); // the last connection exhausted its retries
             }
-            set.spawn(worker(ctx.clone(), next_id, None));
+            // Every network is off or disconnected: wait for one (the look above), holding
+            // what is on disk.
+            let lane = (0..lane_count).find(|k| ctx.lanes[lane_at(*k)].on());
+            let Some(k) = lane else {
+                if !waiting {
+                    waiting = true;
+                    ctx.shared
+                        .event("Every network is off or disconnected; waiting for one");
+                }
+                continue;
+            };
+            set.spawn(worker(ctx.clone(), next_id, lane_at(k), None));
+            started[k] += 1;
             next_id += 1;
         }
     }
     Ok(())
 }
+
+/// How often a combined download looks whether a network came back.
+const LANE_LOOK: Duration = Duration::from_millis(500);
 
 /// Stop the connections still running, and wait until each has. They are told to stop, not
 /// aborted: a connection aborted in a blocking read or write of the part file (the check of
@@ -3420,15 +3809,40 @@ async fn stop_connections(ctx: &Ctx, set: &mut JoinSet<Result<(), Error>>) {
 }
 
 /// One connection: take an assignment, fetch it, repeat until there is nothing left to do.
-async fn worker(ctx: Arc<Ctx>, id: WorkerId, mut first: Option<Body>) -> Result<(), Error> {
+async fn worker(
+    ctx: Arc<Ctx>,
+    id: WorkerId,
+    lane: usize,
+    mut first: Option<Body>,
+) -> Result<(), Error> {
     let mut after = None;
     let mut failures = 0u32;
     // Bytes this connection had received at its last failure: progress since resets the budget.
     let mut at_last_failure = 0u64;
+    let network = ctx.lanes[lane].net.is_some().then_some(lane);
+    ctx.shared.conn(id, |c| c.network = network);
+    // Its network was switched off or disconnected: this connection ends (the supervisor
+    // starts new ones when the network is back), its segment left to the others.
+    let network_off = |ctx: &Ctx| {
+        ctx.shared.with_planner(|p| p.release(id));
+        ctx.shared.conn(id, |c| {
+            c.status = ConnStatus::NetworkOff;
+            c.speed = 0;
+        });
+    };
     loop {
         if ctx.cancel.is_cancelled() {
             return Err(Error::Cancelled);
         }
+        // The client of its network as it is now; the probe's own body needs none.
+        let lane_client = match ctx.lane_client(lane) {
+            Some(client) => client,
+            None if first.is_some() => ctx.client.clone(),
+            None => {
+                network_off(&ctx);
+                return Ok(());
+            }
+        };
         let Some(a) = ctx.shared.with_planner(|p| p.assign(id, after.take())) else {
             ctx.shared.conn(id, |c| c.status = ConnStatus::Finished);
             return Ok(());
@@ -3461,14 +3875,16 @@ async fn worker(ctx: Arc<Ctx>, id: WorkerId, mut first: Option<Body>) -> Result<
         let result = match first.take() {
             Some(body) if a.from == 0 => {
                 let to = request_end(&ctx, id, 0).unwrap_or(a.to);
-                receive_all(&ctx, id, &target, Some(body), 0, to, 0, whole).await
+                let on = (lane, &lane_client);
+                receive_all(&ctx, id, on, &target, Some(body), 0, to, 0, whole).await
             }
             Some(_) => Err(Error::BadRange(
                 "probe segment no longer starts at 0".into(),
             )),
             None => {
                 let to = request_end(&ctx, id, a.from).unwrap_or(a.to);
-                receive_all(&ctx, id, &target, None, a.from, to, overlap, false).await
+                let on = (lane, &lane_client);
+                receive_all(&ctx, id, on, &target, None, a.from, to, overlap, false).await
             }
         };
         match result {
@@ -3492,6 +3908,10 @@ async fn worker(ctx: Arc<Ctx>, id: WorkerId, mut first: Option<Body>) -> Result<
                     Err(Error::NoRanges)
                 };
             }
+            Err(Error::NetworkOff(_)) => {
+                network_off(&ctx);
+                return Ok(());
+            }
             Err(e) => {
                 ctx.shared.with_planner(|p| p.release(id));
                 if e.is_fatal() {
@@ -3502,10 +3922,13 @@ async fn worker(ctx: Arc<Ctx>, id: WorkerId, mut first: Option<Body>) -> Result<
                     ctx.shared.event(format!("Connection {}: {e}", id + 1));
                     continue;
                 }
-                let (working, receiving) = ctx
-                    .shared
-                    .with_planner(|p| (p.active_workers(), p.receiving_workers()));
-                let others = working > 0;
+                // Its network went while it was asking or receiving: no retry on it.
+                if !ctx.lanes[lane].on() {
+                    network_off(&ctx);
+                    return Ok(());
+                }
+                let (working, receiving) = ctx.peers(id, lane);
+                let others = ctx.shared.with_planner(|p| p.active_workers()) > 0;
                 // An extra connection refused while others work: the host's connection limit.
                 // Once learned (twice seen), this connection retires instead of retrying — if the
                 // others fill the cap. Below it the server most likely still counts a connection
@@ -3598,6 +4021,7 @@ fn request_end(ctx: &Ctx, id: WorkerId, from: u64) -> Option<u64> {
 async fn receive_all(
     ctx: &Ctx,
     id: WorkerId,
+    (lane, client): (usize, &Client),
     target: &Target,
     body: Option<Body>,
     from: u64,
@@ -3615,10 +4039,10 @@ async fn receive_all(
                 if let Some(cap) = ctx.opts.cap().filter(|c| overlap < *c && ctx.ftp.is_none()) {
                     to = to.min(from - overlap + cap);
                 }
-                request(ctx, target, from - overlap, to).await?
+                request(ctx, client, target, from - overlap, to).await?
             }
         };
-        match receive(ctx, id, b, from, to, overlap, whole).await? {
+        match receive(ctx, id, lane, b, from, to, overlap, whole).await? {
             Received::Complete(end) => return Ok(Some(end)),
             Received::Lost => return Ok(None),
             // The capped request came whole, its segment goes on: the next piece of it.
@@ -3644,7 +4068,13 @@ enum Received {
 
 /// `GET` bytes `[from, to)`; checks the server returned exactly that range of the same file.
 /// FTP: `REST from` and `RETR`.
-async fn request(ctx: &Ctx, target: &Target, from: u64, to: u64) -> Result<Body, Error> {
+async fn request(
+    ctx: &Ctx,
+    client: &Client,
+    target: &Target,
+    from: u64,
+    to: u64,
+) -> Result<Body, Error> {
     if let Some(site) = &ctx.ftp {
         return match cancellable(&ctx.cancel, site.open_at(from, Some(ctx.size))).await {
             Ok(t) => {
@@ -3686,7 +4116,7 @@ async fn request(ctx: &Ctx, target: &Target, from: u64, to: u64) -> Result<Body,
         }
         None => {
             let mut req = build(
-                &ctx.client,
+                client,
                 target.url.clone(),
                 target.post.as_ref(),
                 &target.headers,
@@ -4301,9 +4731,11 @@ mod web_page_tests {
 /// Writing runs beside receiving (`Writer`): while the disk takes one write, what arrives waits
 /// in memory, up to the connection's share of `HOLD_MAX`, and only then does the connection
 /// stand still for the disk (#361, #782).
+#[allow(clippy::too_many_arguments)]
 async fn receive(
     ctx: &Ctx,
     id: WorkerId,
+    lane: usize,
     mut body: Body,
     from: u64,
     to: u64,
@@ -4314,6 +4746,12 @@ async fn receive(
     let mut out = Writer::new(ctx, id, from);
     let mut pace = Pace::new();
     let mut checked = std::time::Instant::now();
+    let lane_at = lane;
+    let lane = &ctx.lanes[lane];
+    let net = lane.net.as_ref();
+    // One timer for the whole response, not one per chunk.
+    let gone = network_gone(net);
+    tokio::pin!(gone);
     loop {
         let next = tokio::select! {
             _ = ctx.cancel.cancelled() => {
@@ -4322,6 +4760,11 @@ async fn receive(
                 return Err(Error::Cancelled);
             }
             n = body.chunk() => n,
+            // Its network switched off while nothing arrives (a limit's wait is below).
+            () = &mut gone => {
+                out.finish(&mut pace).await?;
+                return Err(Error::NetworkOff(lane.label()));
+            }
         };
         // `complete`: the segment ended where this connection had written (a split shortened it).
         let (ended, err, complete) = match next {
@@ -4344,11 +4787,18 @@ async fn receive(
                     }
                 }
                 let want = chunk.len() as u64;
+                // What its network carried, kept or not (its data allowance counts all of it).
+                if let Some(net) = net {
+                    net.count(want);
+                }
                 // Pay first: the wait is when other connections may split this segment, and
                 // the claim below then grants only what still belongs to it. Stop ends the
                 // wait (under a low limit it is seconds long; Stop used to wait it out).
                 let paid = async {
                     ctx.shared.limiter.acquire(want).await;
+                    if let Some(net) = net {
+                        net.limiter.acquire(want).await;
+                    }
                     if let Some(g) = &ctx.opts.global {
                         g.acquire(want).await;
                     }
@@ -4386,6 +4836,9 @@ async fn receive(
                 // the disk (a write still running is waited for all the same, #201).
                 let refund = |n: u64| {
                     ctx.shared.limiter.refund(n);
+                    if let Some(net) = net {
+                        net.limiter.refund(n);
+                    }
                     if let Some(g) = &ctx.opts.global {
                         g.refund(n);
                     }
@@ -4403,17 +4856,26 @@ async fn receive(
                     && let Some(limits) = &ctx.opts.host_limits
                 {
                     // This connection's first data: tell the host's learned cap how many are
-                    // receiving now.
-                    let now = ctx.shared.with_planner(|p| p.receiving_workers()) as u32;
+                    // receiving now (on its network, when networks are combined).
+                    let now = if ctx.combines() {
+                        ctx.peers(id, lane_at).1 as u32 + 1
+                    } else {
+                        ctx.shared.with_planner(|p| p.receiving_workers()) as u32
+                    };
                     limits.working(ctx.target().url.host_str().unwrap_or(""), now);
                 }
                 out.push(&chunk[..n as usize]);
+                lane.received.fetch_add(n, Ordering::Relaxed);
                 pace.received += n;
                 if checked.elapsed() >= Duration::from_millis(500) {
                     checked = std::time::Instant::now();
                     ctx.shared.conn(id, |c| c.speed = pace.speed());
-                    note_best(ctx, &pace);
-                    if should_shed(ctx, id, &pace, out.next()) {
+                    note_best(lane, &pace);
+                    if !lane.on() {
+                        out.finish(&mut pace).await?;
+                        return Err(Error::NetworkOff(lane.label()));
+                    }
+                    if should_shed(ctx, lane, id, &pace, out.next()) {
                         out.finish(&mut pace).await?;
                         return Err(Error::SlowConnection);
                     }
@@ -4436,7 +4898,7 @@ async fn receive(
         };
         match complete {
             Some(end) => {
-                note_best(ctx, &pace);
+                note_best(lane, &pace);
                 // A segment another connection shortened leaves an HTTP body far from its end
                 // (dropped); an FTP session is kept either way.
                 if err.is_none() && (out.pos >= to || matches!(body, Body::Ftp(_))) {
@@ -4674,9 +5136,9 @@ fn rate(bytes: u64, d: Duration) -> u64 {
 
 /// Remember the speed of a response that ran long enough (`BEST_AFTER`, 256 KiB) to say what
 /// this server can do over one connection.
-fn note_best(ctx: &Ctx, pace: &Pace) {
+fn note_best(lane: &Lane, pace: &Pace) {
     if let Some(speed) = yardstick(pace.received, pace.started.elapsed()) {
-        ctx.shared.best_speed.fetch_max(speed, Ordering::Relaxed);
+        lane.best_speed.fetch_max(speed, Ordering::Relaxed);
     }
 }
 
@@ -4689,18 +5151,30 @@ fn yardstick(received: u64, elapsed: Duration) -> Option<u64> {
     (received >= 256 * 1024 && elapsed >= BEST_AFTER).then(|| rate(received, elapsed))
 }
 
+/// Ends when `net` is switched off or disconnected (looked at twice a second); never for a
+/// download that combines no networks.
+async fn network_gone(net: Option<&Arc<net::Network>>) {
+    let Some(net) = net else {
+        return std::future::pending().await;
+    };
+    while net.usable() {
+        tokio::time::sleep(LANE_LOOK).await;
+    }
+}
+
 /// Whether connection `id` should reconnect (`too_slow`), its next byte `at`. Never while a
 /// speed limit makes connections slow on purpose, nor under `request_cap`: each request ends
 /// soon by itself, and the server's pace varies from one to the next (YouTube's, #769:
 /// reconnecting cost more than it won).
-fn should_shed(ctx: &Ctx, id: WorkerId, pace: &Pace, at: u64) -> bool {
+fn should_shed(ctx: &Ctx, lane: &Lane, id: WorkerId, pace: &Pace, at: u64) -> bool {
     let limited = ctx.shared.limiter.get().is_some()
+        || lane.net.as_ref().is_some_and(|n| n.limiter.get().is_some())
         || ctx.opts.global.as_ref().is_some_and(|g| g.get().is_some());
     if !ctx.opts.shed_slow || limited || ctx.opts.cap().is_some() {
         return false;
     }
     let held = ctx.shared.disk_held.lock().unwrap().map(|t| t.elapsed());
-    let best = ctx.shared.best_speed.load(Ordering::Relaxed);
+    let best = lane.best_speed.load(Ordering::Relaxed);
     let left = ctx.shared.with_planner(|p| p.room(id, at)).unwrap_or(0);
     too_slow(pace.net_speed(), pace.on_net(), best, left, held)
 }
@@ -4726,9 +5200,19 @@ async fn single_stream(
     file: &Arc<File>,
     shared: &Arc<Shared>,
     global: Option<&Limiter>,
+    lane: &Lane,
     cancel: &CancellationToken,
 ) -> Result<u64, Error> {
-    shared.conn(0, |c| c.status = ConnStatus::Receiving);
+    let on_network = lane.net.is_some().then(|| {
+        shared
+            .lanes
+            .get()
+            .and_then(|all| all.iter().position(|l| std::ptr::eq(l, lane)))
+    });
+    shared.conn(0, |c| {
+        c.status = ConnStatus::Receiving;
+        c.network = on_network.flatten();
+    });
     let expected = body.len();
     let mut pos = 0u64;
     loop {
@@ -4737,9 +5221,20 @@ async fn single_stream(
             n = body.chunk() => n,
         };
         let Some(chunk) = next? else { break };
+        // The one connection there is: when its network is switched off, the download stops
+        // (and starts again through another, or when it is back).
+        if let Some(net) = lane.net.as_ref().filter(|n| !n.usable()) {
+            return Err(Error::Adapter(net::NetError::Down { label: net.label() }));
+        }
+        lane.received
+            .fetch_add(chunk.len() as u64, Ordering::Relaxed);
         // Stop ends a limiter's wait too (under a low limit it is seconds long).
         let paid = async {
             shared.limiter.acquire(chunk.len() as u64).await;
+            if let Some(net) = &lane.net {
+                net.count(chunk.len() as u64);
+                net.limiter.acquire(chunk.len() as u64).await;
+            }
             if let Some(g) = global {
                 g.acquire(chunk.len() as u64).await;
             }

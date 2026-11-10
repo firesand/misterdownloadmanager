@@ -164,6 +164,106 @@ impl Binding {
     }
 }
 
+/// One of the networks downloads are combined over (`Options::networks`): Wi-Fi and Ethernet, a
+/// tethered phone, a second line. Each connection of a download is held to one of them
+/// (`Route::Bound`), so the networks' speeds add up; a download's free connections split what is
+/// left of the file, so a faster network ends up carrying more of it.
+///
+/// One `Network` is shared by every download (and by whoever watches the adapters): its route
+/// follows the adapter as it connects and disconnects, it can be switched off while downloads
+/// run (their connections on it stop; the other networks go on), and it counts and limits what
+/// it carries.
+#[derive(Debug)]
+pub struct Network {
+    /// What stays the same from one start to the next: the adapter's name as the system has it.
+    pub id: String,
+    state: std::sync::Mutex<(String, Route)>,
+    off: std::sync::atomic::AtomicBool,
+    received: std::sync::atomic::AtomicU64,
+    /// This network's own speed limit, for every download together (none until set).
+    pub limiter: crate::limiter::Limiter,
+}
+
+impl Network {
+    pub fn new(id: impl Into<String>, label: impl Into<String>, route: Route) -> Arc<Network> {
+        Arc::new(Network {
+            id: id.into(),
+            state: std::sync::Mutex::new((label.into(), route)),
+            off: Default::default(),
+            received: Default::default(),
+            limiter: crate::limiter::Limiter::new(None),
+        })
+    }
+
+    /// Its name as shown (the user's own for it, else the adapter's).
+    pub fn label(&self) -> String {
+        self.state.lock().unwrap().0.clone()
+    }
+
+    /// How its connections leave now: bound to its adapter, or `Down` while it has no address.
+    pub fn route(&self) -> Route {
+        self.state.lock().unwrap().1.clone()
+    }
+
+    /// The adapter as it is now (its watch calls this); true when that changed something.
+    pub fn update(&self, label: &str, route: Route) -> bool {
+        let mut s = self.state.lock().unwrap();
+        let changed = s.0 != label || s.1 != route;
+        if changed {
+            *s = (label.to_owned(), route);
+        }
+        changed
+    }
+
+    /// Switch it off (the user's choice, or its data allowance is used up) or back on. Off, no
+    /// new request goes through it and those receiving stop within half a second.
+    pub fn set_off(&self, off: bool) {
+        self.off.store(off, std::sync::atomic::Ordering::Relaxed);
+    }
+
+    pub fn is_off(&self) -> bool {
+        self.off.load(std::sync::atomic::Ordering::Relaxed)
+    }
+
+    /// Whether a connection may be opened through it now: switched on, and its adapter is there.
+    pub fn usable(&self) -> bool {
+        !self.is_off() && !matches!(self.route(), Route::Down { .. })
+    }
+
+    /// Every byte received through it since it was made, by all downloads (its data allowance
+    /// is counted from this).
+    pub fn received(&self) -> u64 {
+        self.received.load(std::sync::atomic::Ordering::Relaxed)
+    }
+
+    /// `n` more bytes came in through it.
+    pub fn count(&self, n: u64) {
+        self.received
+            .fetch_add(n, std::sync::atomic::Ordering::Relaxed);
+    }
+}
+
+/// The network a download's first request goes through: the first usable one, as (its place in
+/// `networks`, its route). None when nothing is combined, or none of them can be used now.
+pub fn primary(networks: &[Arc<Network>]) -> Option<(usize, Route)> {
+    networks
+        .iter()
+        .enumerate()
+        .find(|(_, n)| n.usable())
+        .map(|(i, n)| (i, n.route()))
+}
+
+/// The route of a set of networks none of which can be used: `Down`, naming them.
+pub fn none_usable(networks: &[Arc<Network>]) -> Route {
+    Route::Down {
+        label: networks
+            .iter()
+            .map(|n| n.label())
+            .collect::<Vec<_>>()
+            .join(", "),
+    }
+}
+
 /// Why a connection was not opened.
 #[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
 pub enum NetError {

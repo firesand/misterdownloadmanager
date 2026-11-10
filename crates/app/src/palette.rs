@@ -248,6 +248,7 @@ palette! {
     row_pressed: "row.pressed", "A list row pressed" = grey(0x4f), grey(0xe8);
     chip_web: "chip.web", "The download list's Web chip" = rgb(0x2e, 0x9d, 0x52), rgb(0x2e, 0x9d, 0x52);
     chip_torrent: "chip.torrent", "The download list's Torrent chip" = rgb(0x7e, 0x4f, 0xd0), rgb(0x7e, 0x4f, 0xd0);
+    chip_usenet: "chip.usenet", "The download list's Usenet chip" = rgb(0xb3, 0x5c, 0x0f), rgb(0xb3, 0x5c, 0x0f);
     chip_text: "chip.text", "Text on a chip" = grey(0xff), grey(0xff);
     drag_ghost: "list.drag-ghost", "A column header being dragged" = rgba(0x60, 0x60, 0x60, 160), rgba(0x60, 0x60, 0x60, 160);
     marquee: "list.marquee", "The rubber band that selects rows" = rgba(0x33, 0x99, 0xff, 0x40), rgba(0x33, 0x99, 0xff, 0x40);

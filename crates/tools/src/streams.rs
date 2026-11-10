@@ -489,6 +489,9 @@ pub struct View {
     pub segments: Vec<SegmentView>,
     pub connections: Vec<ConnView>,
     pub server: Option<mdm_engine::Server>,
+    /// The networks the stream under way combines (Downloads → Combine networks), as the
+    /// engine's snapshot has them; empty when it combines none.
+    pub networks: Vec<mdm_engine::download::NetView>,
     /// The address the stream under way comes from, as yt-dlp gave it (#795): the windows'
     /// "Address", the page being the web page it was obtained from.
     pub address: Option<Url>,
@@ -760,6 +763,7 @@ fn fetch_pieces(
                 segments: segments(&sizes, i, &here),
                 connections,
                 server: None,
+                networks: Vec::new(),
                 address: Some(s.url.clone()),
             },
         );
@@ -837,6 +841,7 @@ fn follow(
                 segments: segments(&sizes, i, &s.segments),
                 connections: s.connections.clone(),
                 server: s.server.clone(),
+                networks: s.networks.clone(),
                 address: Some(plan.streams[i].url.clone()),
             },
         );

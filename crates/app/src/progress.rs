@@ -2356,6 +2356,19 @@ fn connections(ui: &mut Ui, p: &egui::Painter, o: Pos2, snap: Option<&Snapshot>)
                 ),
                 &[("host", &crate::i18n::ltr(host))],
             ),
+            // i18n: a connection's state: it closed because its network (Downloads → Combine networks) was switched off or disconnected
+            ConnStatus::NetworkOff => crate::i18n::t("Closed: its network is off").to_owned(),
+        };
+        // Combining networks: each connection says which one it is on.
+        let network = c.network.and_then(|i| snap.and_then(|s| s.networks.get(i)));
+        let info = match network {
+            Some(n) if info.is_empty() => n.label.clone(),
+            Some(n) => crate::i18n::fmt(
+                // i18n: a connection's line in the progress window while networks are combined: {network} the network it uses (Wi-Fi, Ethernet…), {state} what it is doing (Receiving data...)
+                crate::i18n::t("{network}: {state}"),
+                &[("network", &n.label), ("state", &info)],
+            ),
+            None => info,
         };
         // The Info column ends at the scrollbar.
         let (rect, cut) = winui::text_fit(

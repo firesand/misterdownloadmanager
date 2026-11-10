@@ -1,0 +1,35 @@
+[package]
+name = "mdm-usenet"
+description = "Usenet downloads for Mister Download Manager: NZB files, NNTP, yEnc"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+publish.workspace = true
+
+[dependencies]
+# Network adapter routes (net::tcp_connect), the speed limiters, file naming and TLS checks.
+mdm-engine.workspace = true
+# The resume state is written atomically, and a finished file renamed past antivirus locks.
+craft-atomic.workspace = true
+# Each article's CRC-32.
+crc32fast.workspace = true
+# The same TLS setup as the engine's FTPS: the system's verifier with the aws-lc-rs provider.
+rustls.workspace = true
+rustls-platform-verifier.workspace = true
+tokio-rustls.workspace = true
+# NZB files are XML. roxmltree never fetches external entities.
+roxmltree = "0.20.0"
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tokio.workspace = true
+tokio-util.workspace = true
+tracing.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
+
+[lints]
+workspace = true

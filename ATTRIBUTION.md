@@ -25,6 +25,17 @@ icons named MDM's own above; each set's `SOURCES.txt` lists them.
 The README's block icons (`docs/images/icons/`: arrow, globe, gift, magnet) were made for it
 with OpenAI's GPT-5 Image Mini by `tools/readme/icons.py`, given the app icon as the style to follow.
 
+## Plexo
+
+Combine networks (`crates/engine/src/net.rs` `Network`, `Options::networks`,
+`crates/app/src/networks.rs`) and Usenet downloads (`crates/usenet`, `crates/app/src/usenet.rs`)
+bring to Mister Download Manager what [Plexo](https://github.com/anmolkapil/plexo) does:
+downloads over several networks at once, each network's own name, speed limit and data
+allowance, and NZB files from a news server. The code here was written for MDM's engine in
+Rust; Plexo's TypeScript was the reference for how the features behave (which adapters count as
+networks, how allowance periods are counted, how NZB files are named and yEnc articles decoded).
+Plexo is © 2026 Anmol Kapil, MIT licence: `crates/usenet/LICENSE-plexo`.
+
 ## Archive extraction (mdm-extract)
 
 The libraries Link grabber's archive extraction is built on (all compatible with MDM's GPL-3.0):

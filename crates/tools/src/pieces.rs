@@ -504,6 +504,8 @@ pub async fn download(
             downloaded: 0,
             status: ConnStatus::Connecting,
             speed: 0,
+            // Pieces go through one network, the first usable one (`http_client`).
+            network: None,
         })
         .collect();
     let run = Arc::new(Run {

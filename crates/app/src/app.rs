@@ -326,6 +326,11 @@ enum Cmd {
     /// Downloads → Find (Ctrl-F) / Find Next (F3).
     Find,
     FindNext,
+    /// Downloads → Combine networks…
+    CombineNetworks,
+    /// Tasks → Open NZB file… / Usenet server…
+    OpenNzbFile,
+    UsenetServer,
     /// View → Arrange files: sort by a column (data slot), or by order of addition.
     Arrange(Option<usize>),
     /// Header right-click → Clear all filters.
@@ -967,6 +972,12 @@ pub struct App {
     helper_started: HashMap<u64, Option<u64>>,
     helper_own: HashMap<u64, Option<u64>>,
     limit_restarts: Vec<u64>,
+    /// Downloads → Combine networks: the networks file downloads go through at once, and its
+    /// window while open.
+    networks: crate::networks::Networks,
+    networks_dlg: Option<crate::networksdlg::NetworksDlg>,
+    /// Tasks → Usenet server…, while open.
+    usenet_dlg: Option<crate::usenet::ServerDlg>,
     find: Option<crate::find::Find>,
     /// The last search, for Find Next.
     last_find: Option<crate::find::Query>,
@@ -1610,6 +1621,9 @@ impl App {
             helper_started: HashMap::new(),
             helper_own: HashMap::new(),
             limit_restarts: Vec::new(),
+            networks: Default::default(),
+            networks_dlg: None,
+            usenet_dlg: None,
             find: None,
             last_find: None,
             notice: None,
@@ -1812,7 +1826,14 @@ impl App {
                 &[("file", &crate::i18n::isolate(&file))],
             )
         });
-        let right = match (reading, self.activity()) {
+        // Combining networks: what each carries now, before the total.
+        let activity = self
+            .activity()
+            .map(|total| match self.networks.summary(&self.settings) {
+                Some(each) => format!("{each}   {total}"),
+                None => total,
+            });
+        let right = match (reading, activity) {
             (Some(r), Some(a)) => Some(format!("{r}   {a}")),
             (r, a) => r.or(a),
         };
@@ -1907,6 +1928,9 @@ impl App {
                 if it.torrent.is_some() || it.remote.is_some() {
                     // i18n: where a download comes from: BitTorrent (shown on a small colored label)
                     "Torrent".into()
+                } else if it.usenet.is_some() {
+                    // i18n: where a download comes from: Usenet, a news server (shown on a small colored label)
+                    "Usenet".into()
                 } else {
                     // i18n: where a download comes from: a web or FTP server (shown on a small colored label)
                     "Web".into()
@@ -2275,7 +2299,39 @@ impl App {
         crate::debrid::Route::new(&self.debrid, &self.settings)
     }
 
+    /// Downloads → Combine networks, once a frame: the networks follow their adapters and
+    /// settings; the running file downloads start again (from where they are) when combining
+    /// is switched on or off, or a network joins that they were started without.
+    fn networks_tick(&mut self, ctx: &egui::Context) {
+        let running = self
+            .items
+            .iter()
+            .any(|i| matches!(i.live.as_ref().map(|l| &l.dl), Some(model::Job::File(_))));
+        let asked = self.networks.tick(&mut self.settings, ctx, running);
+        if asked.save {
+            self.dirty = true;
+        }
+        if !asked.restart {
+            return;
+        }
+        // i18n: event log entry: the download stopped to start again through the networks as they are now (Combine networks was switched on or off, or a network connected)
+        let note = crate::i18n::t("Stopped: the networks to combine changed; starting again");
+        for i in &mut self.items {
+            if let Some(l) = &i.live
+                && let model::Job::File(dl) = &l.dl
+            {
+                dl.cancel();
+                i.note(note.to_owned());
+                if !self.adapter_paused.contains(&i.id) {
+                    self.adapter_paused.push(i.id);
+                }
+            }
+        }
+        self.dirty = true;
+    }
+
     fn network_adapter_tick(&mut self, ctx: &egui::Context) {
+        self.networks_tick(ctx);
         let route = self.netwatch.route(&self.settings.net_adapter, ctx);
         crate::settings::share_route(route.clone());
         if route != self.route {
@@ -2518,6 +2574,8 @@ impl App {
             // clipboard is MDM_TEST_CLIPBOARD's file).
             "batch-clipboard" => self.run(Cmd::BatchClipboard, None, ctx),
             "find" => self.run(Cmd::Find, None, ctx),
+            "networks" => self.run(Cmd::CombineNetworks, None, ctx),
+            "usenet" => self.run(Cmd::UsenetServer, None, ctx),
             "scheduler" => self.run(Cmd::Scheduler, None, ctx),
             "about" => self.run(Cmd::About, None, ctx),
             // Update now's end-to-end tests (feature `test-update`, never in a release): Update
@@ -2889,6 +2947,20 @@ impl App {
         if cmd.start_queue {
             self.start_queue(0);
         }
+        // An NZB file (command line, file association, dropped on the window).
+        if let Some(nzb) = cmd
+            .url
+            .as_deref()
+            .map(|u| u.trim().trim_matches('"'))
+            .filter(|u| {
+                u.to_ascii_lowercase().ends_with(".nzb") && std::path::Path::new(u).is_file()
+            })
+        {
+            let nzb = PathBuf::from(nzb);
+            self.show_window(ctx);
+            self.add_nzb(&nzb, ctx);
+            return;
+        }
         // A magnet link or a .torrent file (browser, command line, file association): Add
         // torrent shows what it holds.
         if let Some(m) = cmd.url.as_deref().filter(|u| {
@@ -3023,6 +3095,8 @@ impl App {
             proxy: self.settings.proxy_for(context),
             dns: self.settings.dns(),
             route: self.route.clone(),
+            // Downloads → Combine networks: through every ticked network at once.
+            networks: self.networks.for_download(&self.settings),
             // Through a debrid account when one takes this host (#44).
             unlocker: self.debrid_route().unlocker(url, direct),
             global: Some(self.global.clone()),
@@ -3117,6 +3191,10 @@ impl App {
         }
         if self.item(id).is_some_and(|i| i.torrent.is_some()) {
             self.start_torrent(id, show);
+            return;
+        }
+        if self.item(id).is_some_and(|i| i.usenet.is_some()) {
+            self.start_usenet(id, show);
             return;
         }
         // A torrent through a debrid account (#44).
@@ -4766,6 +4844,139 @@ impl App {
                 item.error = Some(e.to_string());
             }
         }
+        self.dirty = true;
+        if show && !self.progress.iter().any(|p| p.id == id) {
+            self.progress
+                .push(Progress::new(id, self.settings.show_complete));
+        }
+    }
+
+    /// An NZB file opened (Tasks → Open NZB file…, the command line, a drop): one row for
+    /// what it describes, started at once. The NZB is kept in the data folder, so the row
+    /// resumes without the file it came from; a single file goes into its category's folder,
+    /// several into a folder of their own there.
+    fn add_nzb(&mut self, path: &std::path::Path, ctx: &egui::Context) {
+        let fail = |why: String| {
+            (
+                // i18n: title of the message when an NZB file can't be opened
+                crate::i18n::mark("Open NZB file"),
+                crate::i18n::fmt(
+                    // i18n: an NZB file could not be read; {file} its name, {error} why
+                    crate::i18n::t("{file} can't be downloaded: {error}"),
+                    &[
+                        ("file", &crate::i18n::ltr(&path.display().to_string())),
+                        ("error", &why),
+                    ],
+                ),
+            )
+        };
+        let opened = match crate::usenet::open(path) {
+            Ok(o) => o,
+            Err(e) => {
+                self.notice = Some(fail(e));
+                return;
+            }
+        };
+        let id = self.next_id;
+        let kept = crate::usenet::nzb_dir().map(|d| d.join(format!("{id}.nzb")));
+        let Some(kept) = kept.filter(|k| {
+            k.parent()
+                .is_some_and(|d| std::fs::create_dir_all(d).is_ok())
+                && std::fs::copy(path, k).is_ok()
+        }) else {
+            self.notice = Some(fail(
+                // i18n: why an NZB file can't be downloaded: MDM could not keep its own copy of it
+                crate::i18n::t("it could not be copied into the data folder").to_owned(),
+            ));
+            return;
+        };
+        let Ok(url) = url::Url::from_file_path(&kept) else {
+            return;
+        };
+        // One file: named and filed as any download. Several: their own folder.
+        let (dest, folder, category) = match opened.nzb.files.as_slice() {
+            [one] => {
+                let category = Category::of(&one.name);
+                let dir = self.settings.category_dir(category, &self.downloads);
+                (dir.join(&one.name), dir, category)
+            }
+            _ => {
+                let dir = self
+                    .settings
+                    .category_dir(Category::General, &self.downloads);
+                let folder = mdm_engine::naming::unique_path(&dir, &opened.name);
+                (folder.clone(), folder, Category::General)
+            }
+        };
+        let id = self.push_item(
+            url,
+            dest,
+            category,
+            String::new(),
+            Some(opened.nzb.size()),
+            None,
+            ipc::Command::default(),
+            // i18n: where a download came from, in its event log ("Added from an NZB file")
+            crate::i18n::mark("from an NZB file"),
+        );
+        if let Some(item) = self.item(id) {
+            item.usenet = Some(crate::usenet::UsenetSpec { nzb: kept, folder });
+            if opened.nzb.files.len() != 1 {
+                item.file_name = opened.name;
+            }
+        }
+        self.queues[0].items.push(id);
+        // No server yet: its window first; the row waits, and starts with Resume.
+        if crate::usenet::server(&self.settings).is_none() {
+            self.run(Cmd::UsenetServer, None, ctx);
+            if let Some(item) = self.item(id) {
+                item.status = Status::Stopped;
+            }
+            return;
+        }
+        self.start(id, true);
+    }
+
+    /// Start or go on with a Usenet download (usenet.rs).
+    fn start_usenet(&mut self, id: u64, show: bool) {
+        let rt = self.rt.clone();
+        let limit = self.settings.speed_limit();
+        let nets = self.networks.for_download(&self.settings);
+        let (route, global) = (self.route.clone(), self.global.clone());
+        let settings = self.settings.clone();
+        let Some(item) = self.item(id) else { return };
+        let Some(spec) = item.usenet.clone() else {
+            return;
+        };
+        let limit = item.own_limit.or(limit);
+        let name = item.file_name.clone();
+        match crate::usenet::Run::start(
+            &rt,
+            &spec,
+            item.url.clone(),
+            &name,
+            &settings,
+            route,
+            nets,
+            global,
+            limit,
+        ) {
+            Ok(run) => {
+                item.note(if item.downloaded > 0 {
+                    crate::i18n::t("Resumed")
+                } else {
+                    crate::i18n::t("Started")
+                });
+                item.live = Some(Live::new(model::Job::Usenet(run), item.downloaded));
+                item.status = Status::Downloading;
+                item.error = None;
+            }
+            Err(e) => {
+                item.status = Status::Error;
+                item.error = Some(e);
+            }
+        }
+        item.last_try = Some(model::now_stamp());
         self.dirty = true;
         if show && !self.progress.iter().any(|p| p.id == id) {
             self.progress
@@ -6669,6 +6880,32 @@ impl App {
                     dialogs::raise(ctx, dialogs::dialog_viewport("find"));
                 }
             }
+            Cmd::OpenNzbFile => {
+                // i18n: the kind of file the Open NZB file dialog lists (NZB: a Usenet download's description, left as is)
+                let kind = crate::i18n::t("NZB files").to_owned();
+                // i18n: title of the dialog that picks an NZB file to download
+                let title = crate::i18n::t("Open NZB file").to_owned();
+                winui::start_pick(ctx, "app-nzb-file", move || {
+                    rfd::FileDialog::new()
+                        .add_filter(kind, &["nzb"])
+                        .set_title(title)
+                        .pick_file()
+                });
+            }
+            Cmd::UsenetServer => {
+                if self.usenet_dlg.is_none() {
+                    self.usenet_dlg = Some(crate::usenet::ServerDlg::new(&self.settings));
+                } else {
+                    dialogs::raise(ctx, dialogs::dialog_viewport("usenet-server"));
+                }
+            }
+            Cmd::CombineNetworks => {
+                if self.networks_dlg.is_none() {
+                    self.networks_dlg = Some(crate::networksdlg::NetworksDlg::new());
+                } else {
+                    dialogs::raise(ctx, dialogs::dialog_viewport("networks"));
+                }
+            }
             Cmd::FindNext => match self.last_find.clone() {
                 Some(q) => self.find_next(&q),
                 None => self.find = Some(crate::find::Find::new(None)),
@@ -7218,6 +7455,10 @@ impl App {
                 I("Open &torrent file...", Cmd::OpenTorrentFile, true, false),
                 I("Add &magnet link...", Cmd::AddMagnet, true, false),
                 I("Torrent setti&ngs...", Cmd::TorrentSettings, true, false),
+                // i18n: Tasks menu: pick an NZB file (a Usenet download's description) and download what it describes
+                I("Open N&ZB file...", Cmd::OpenNzbFile, true, false),
+                // i18n: Tasks menu: the news server and account NZB files are downloaded from
+                I("&Usenet server...", Cmd::UsenetServer, true, false),
                 I("Add &batch download", Cmd::Batch, true, false),
                 I(
                     "Add batch download from &clipboard",
@@ -7337,6 +7578,13 @@ impl App {
                         Sep,
                         I("S&ettings...", Cmd::LimiterSettings, true, false),
                     ],
+                ),
+                // i18n: Downloads menu: opens the window where several networks (Wi-Fi and Ethernet, a phone) are combined for downloads; ticked while they are
+                I(
+                    "Combine &networks...",
+                    Cmd::CombineNetworks,
+                    true,
+                    self.settings.combine_networks,
                 ),
                 Sep,
                 I("&Options", Cmd::Options, true, false),
@@ -9136,8 +9384,9 @@ impl App {
             }
         }
         for s in other {
+            let lower = s.to_ascii_lowercase();
             let torrent = mdm_torrent::Source::magnet(&s).is_some()
-                || (s.to_ascii_lowercase().ends_with(".torrent")
+                || ((lower.ends_with(".torrent") || lower.ends_with(".nzb"))
                     && std::path::Path::new(&s).is_file());
             if torrent {
                 self.handle_command(
@@ -9184,6 +9433,9 @@ impl App {
     fn poll_picks(&mut self, ctx: &egui::Context) {
         if let Some(f) = winui::picked(ctx, "app-torrent-file") {
             self.open_torrent_dialog(Some(f.display().to_string()), ctx);
+        }
+        if let Some(f) = winui::picked(ctx, "app-nzb-file") {
+            self.add_nzb(&f, ctx);
         }
         if let Some(path) = winui::picked(ctx, "app-export-ef2") {
             self.export_to(&path, true);
@@ -10065,6 +10317,26 @@ impl App {
                 self.dirty = true;
             }
         }
+        if let Some(d) = &mut self.networks_dlg {
+            let out = d.show(ctx, &mut self.settings, &mut self.networks);
+            if std::mem::take(&mut d.changed) {
+                self.dirty = true;
+            }
+            if !matches!(out, Outcome::Open) {
+                self.networks_dlg = None;
+            }
+        }
+        if let Some(d) = &mut self.usenet_dlg {
+            match d.show(ctx, &self.rt, &self.route) {
+                Outcome::Open => {}
+                Outcome::Closed => self.usenet_dlg = None,
+                Outcome::Done(()) => {
+                    d.apply(&mut self.settings);
+                    self.usenet_dlg = None;
+                    self.dirty = true;
+                }
+            }
+        }
         if let Some(f) = &mut self.find {
             match f.show(ctx) {
                 Outcome::Open => {}
@@ -10911,6 +11183,8 @@ impl Drop for App {
         self.keep_unseen();
         // The feeds as last handed to their saver.
         self.rss_saver.flush();
+        // What each combined network carried, for its data allowance.
+        self.networks.save_usage();
         // What the saver has in hand first, then the last state, written here and now.
         self.saver.flush();
         let _ = store::save(
